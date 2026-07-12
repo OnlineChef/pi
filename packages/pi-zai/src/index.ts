@@ -1,7 +1,8 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import { clampThinkingLevel } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-	analyzeSystemPromptSections,
 	applyZaiCompactionInstructions,
 	applyZaiTreeSummaryInstructions,
 	buildCacheSegmentKey,
@@ -16,6 +17,7 @@ import { createDefaultZaiCommandDeps, registerZaiCommands } from "./commands/ind
 import { loadZaiConfig, type ZaiConfig } from "./config.ts";
 import { formatPiCredentialSource } from "./credentials.ts";
 import { syncProviderRegistration } from "./platform-provider.ts";
+import { snapshotPromptStability } from "./prompt-stability.ts";
 import { formatConnectionErrorHint, isConnectionErrorMessage } from "./resilience.ts";
 import {
 	dispatchZaiHook,
@@ -58,7 +60,16 @@ export {
 	type ZaiSessionState,
 } from "./state.ts";
 
-const EXTENSION_VERSION = "0.1.0";
+const EXTENSION_VERSION = "0.1.1";
+
+function clampThinkingForModel(pi: ExtensionAPI, model: Model<any> | undefined): void {
+	if (!model?.reasoning) return;
+	const current = pi.getThinkingLevel();
+	const clamped = clampThinkingLevel(model, current) as ThinkingLevel;
+	if (clamped !== current) {
+		pi.setThinkingLevel(clamped);
+	}
+}
 
 function updateSessionFromModel(
 	model: Model<any> | undefined,
@@ -121,6 +132,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		}
 
 		updateSessionFromModel(ctx.model, pi.getThinkingLevel());
+		if (ctx.model) clampThinkingForModel(pi, ctx.model);
 		if (ctx.model && isZaiProvider(ctx.model.provider)) {
 			sessionState.credentialSource = formatPiCredentialSource(ctx.model.provider, ctx.modelRegistry);
 		} else {
@@ -137,6 +149,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("model_select", async (event, ctx) => {
+		clampThinkingForModel(pi, event.model);
 		updateSessionFromModel(event.model, pi.getThinkingLevel());
 		if (isZaiProvider(event.model.provider)) {
 			sessionState.credentialSource = formatPiCredentialSource(event.model.provider, ctx.modelRegistry);
@@ -164,22 +177,15 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		if (event.message.role !== "assistant" || !ctx.model || !isZaiModel(ctx.model)) {
 			return;
 		}
-		const sample = getTpsTracker().completeAssistantMessage(event.message.usage, event.message.timestamp);
+		const sample = getTpsTracker().completeAssistantMessage(event.message.usage, Date.now());
 		updateZaiTpsStatus(ctx, config, sample, getTpsTracker().get());
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!ctx.model || !isZaiModel(ctx.model)) return;
 		const toolNames = pi.getActiveTools().map((name) => ({ name }));
-		const stablePrefix = canonicalStableSystemPrefix(event.systemPrompt);
 		updateCacheSegment(ctx.model, event.systemPrompt, toolNames);
-		const analysis = analyzeSystemPromptSections(event.systemPrompt);
-		sessionState.promptStability = {
-			stableLineCount: analysis.stableLineCount,
-			volatileLineCount: analysis.volatileLineCount,
-			hasDynamicMarker: analysis.hasDynamicMarker,
-			systemFingerprint: fingerprintSystemPrompt(stablePrefix),
-		};
+		sessionState.promptStability = snapshotPromptStability(event.systemPrompt);
 	});
 
 	pi.on("turn_end", async (event, ctx) => {

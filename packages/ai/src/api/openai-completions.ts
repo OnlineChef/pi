@@ -117,9 +117,40 @@ interface OpenAICompatCacheControl {
 	ttl?: string;
 }
 
-type ResolvedOpenAICompletionsCompat = Omit<Required<OpenAICompletionsCompat>, "cacheControlFormat"> & {
+type ResolvedOpenAICompletionsCompat = Omit<
+	Required<OpenAICompletionsCompat>,
+	"cacheControlFormat" | "zaiPreserveThinking"
+> & {
 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
+	zaiPreserveThinking?: boolean;
 };
+
+let zaiPreserveThinkingFallbackWarned = false;
+
+function warnZaiPreserveThinkingFallback(): void {
+	if (zaiPreserveThinkingFallbackWarned) return;
+	zaiPreserveThinkingFallbackWarned = true;
+	console.warn(
+		"[pi-ai] Z.AI preserved thinking is enabled but historical reasoning cannot be replayed safely; falling back to clear_thinking=true for this request.",
+	);
+}
+
+function canSafelyPreserveZaiThinking(messages: Message[]): boolean {
+	for (const msg of messages) {
+		if (msg.role !== "assistant") continue;
+		for (const block of msg.content) {
+			if (block.type !== "thinking") continue;
+			if (block.thinkingSignature === "reasoning_content" && block.thinking.trim().length === 0) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+function shouldReplayZaiHistoricalReasoning(compat: ResolvedOpenAICompletionsCompat): boolean {
+	return compat.thinkingFormat !== "zai" || compat.zaiPreserveThinking === true;
+}
 
 type ResolvedChatTemplateKwargValue = string | number | boolean | null;
 
@@ -602,10 +633,19 @@ function buildParams(
 			thinking?: { type: "enabled" | "disabled"; clear_thinking?: boolean };
 			reasoning_effort?: string;
 		};
-		zaiParams.thinking = options?.reasoningEffort ? { type: "enabled", clear_thinking: false } : { type: "disabled" };
-		if (options?.reasoningEffort && compat.supportsReasoningEffort) {
-			const mappedEffort = model.thinkingLevelMap?.[options.reasoningEffort];
-			const effort = mappedEffort === undefined ? options.reasoningEffort : mappedEffort;
+		const enabled = options?.reasoningEffort !== undefined;
+		let preserveThinking = compat.zaiPreserveThinking === true;
+		if (preserveThinking && !canSafelyPreserveZaiThinking(context.messages)) {
+			preserveThinking = false;
+			warnZaiPreserveThinkingFallback();
+		}
+		zaiParams.thinking = enabled
+			? { type: "enabled", clear_thinking: !preserveThinking }
+			: { type: "disabled", clear_thinking: true };
+		if (enabled && compat.supportsReasoningEffort && options?.reasoningEffort !== undefined) {
+			const reasoningEffort = options.reasoningEffort;
+			const mappedEffort = model.thinkingLevelMap?.[reasoningEffort];
+			const effort = mappedEffort === undefined ? reasoningEffort : mappedEffort;
 			if (typeof effort === "string") {
 				zaiParams.reasoning_effort = effort;
 			}
@@ -960,7 +1000,7 @@ export function convertMessages(
 					if (model.provider === "opencode-go" && signature === "reasoning") {
 						signature = "reasoning_content";
 					}
-					if (signature && signature.length > 0) {
+					if (signature && signature.length > 0 && shouldReplayZaiHistoricalReasoning(compat)) {
 						(assistantMsg as any)[signature] = nonEmptyThinkingBlocks.map((block) => block.thinking).join("\n");
 					}
 				}
@@ -1247,6 +1287,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		vercelGatewayRouting: {},
 		chatTemplateKwargs: {},
 		zaiToolStream: false,
+		zaiPreserveThinking: false,
 		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia,
 		cacheControlFormat,
 		sendSessionAffinityHeaders: false,
@@ -1286,6 +1327,7 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompletion
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		chatTemplateKwargs: model.compat.chatTemplateKwargs ?? detected.chatTemplateKwargs,
 		zaiToolStream: model.compat.zaiToolStream ?? detected.zaiToolStream,
+		zaiPreserveThinking: model.compat.zaiPreserveThinking ?? detected.zaiPreserveThinking,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,
 		cacheControlFormat: model.compat.cacheControlFormat ?? detected.cacheControlFormat,
 		sendSessionAffinityHeaders: model.compat.sendSessionAffinityHeaders ?? detected.sendSessionAffinityHeaders,

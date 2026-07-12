@@ -114,3 +114,32 @@ This does **not** invalidate Z.AI server-side caches.
 ## Platform billing note
 
 On `zai-platform`, cached tokens use discounted pricing from model metadata (`cost.cacheRead`). `/zai-usage` and `/zai-cache` show estimated dollar savings on Platform; Coding Plan shows `subscription-managed`.
+
+## Benchmark results (2026-07-12)
+
+Live A/B run via `npm run benchmark:cache-affinity` (Z.AI Coding Plan endpoint).
+
+### Settings
+
+| Parameter | Value |
+|-----------|-------|
+| Trials per mode | 2 (`PI_ZAI_AB_TRIALS=2`) |
+| Turns per trial | 4 (`PI_ZAI_AB_TURNS=4`) |
+| Stable prefix lines | 200 (`PI_ZAI_AB_PREFIX_LINES=200`) |
+| Model | `glm-4.6` (default) |
+
+### Warm-turn cache hit ratio (turn 0 excluded)
+
+| Mode | Median | Aggregate | Avg latency | Errors |
+|------|--------|-----------|-------------|--------|
+| **stable** (fixed `X-Session-Id`, pi-zai default) | 97.9% | 97.9% | 3100 ms | 0 |
+| **none** (no `X-Session-Id`, baseline pi) | 98.6% | 98.6% | 4543 ms | 0 |
+| **rotating** (new `X-Session-Id` every turn) | 98.8% | 98.8% | 2357 ms | 0 |
+
+Per-trial medians: stable 97.9%, 97.9%; none 98.8%, 98.4%; rotating 98.8%, 98.8%.
+
+### Conclusion
+
+**Winner: inconclusive** — the benchmark requires a ≥5 percentage-point median gap between modes. All three modes achieved high warm-turn hit ratios (~98%), so `X-Session-Id` cache affinity did not show a measurable advantage in this run. Latency differed (rotating fastest, none slowest) but hit ratio did not.
+
+This is a **single-run snapshot**, not CI. Default benchmark settings (`trials=5`, `turns=6`, `prefixLines=400`) may produce clearer separation; re-run before drawing production conclusions.

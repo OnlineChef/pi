@@ -145,7 +145,7 @@ async function runConnectionStabilityProbe(ctx: ExtensionCommandContext, model: 
 
 export function registerZaiDoctorCommand(pi: ExtensionAPI, deps: ZaiCommandDeps): void {
 	pi.registerCommand("zai-doctor", {
-		description: "Offline Z.AI integration checks with optional network probe",
+		description: "Z.AI integration checks with optional live network probes",
 		handler: async (_args, ctx) => {
 			const checks: DoctorCheck[] = [];
 			const config = deps.getConfig(ctx.cwd);

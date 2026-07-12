@@ -36,6 +36,17 @@ describe("TpsTracker", () => {
 		const tracker = new TpsTracker();
 		expect(tracker.completeAssistantMessage({ output: 10, reasoning: 0 }, 1000)).toBeUndefined();
 	});
+
+	it("measures duration from wall clock end time", () => {
+		const tracker = new TpsTracker();
+		const started = Date.now();
+		tracker.beginAssistantMessage(started);
+		const ended = started + 2000;
+		const sample = tracker.completeAssistantMessage({ output: 200, reasoning: 0 }, ended);
+		expect(sample?.durationMs).toBeGreaterThanOrEqual(2000);
+		expect(sample?.tps).toBeGreaterThanOrEqual(50);
+		expect(sample?.tps).toBeLessThanOrEqual(150);
+	});
 });
 
 describe("formatTpsStatusLine", () => {

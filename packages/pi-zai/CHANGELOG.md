@@ -4,6 +4,18 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.1.1] - 2026-07-12
+
 ### Added
 
 - Z.AI compaction hooks on `session_before_compact` and `session_before_tree`
@@ -17,10 +29,19 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 - Connection stability probe and Pi retry settings check in `/zai-doctor`
 - Actionable connection-error hints on `agent_settled` after retries exhaust
 - Live cache-affinity A/B benchmark (`npm run benchmark:cache-affinity`)
+- Documented live cache-affinity benchmark snapshot
+- Pi harness suite test for extension command registration, headers, and cache metrics
 
 ### Changed
 
 - README restructured with quick start and documentation index
+- `/zai` and `/zai-usage` show extension version; clamp invalid thinking levels for GLM-5.2
+- Quota fetch retries auth schemes and transient network errors
+
+### Fixed
+
+- TPS uses wall-clock duration (fixes bogus 757000 tok/s)
+- Prompt stability resolves live from system prompt when hook snapshot missing
 
 ## [0.1.0] - 2026-07-12
 
@@ -37,4 +58,5 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 - Credential source names only in diagnostics output; API key values never printed
 
+[0.1.1]: https://github.com/onlinechefgroep/pi-zai/releases/tag/v0.1.1
 [0.1.0]: https://github.com/onlinechefgroep/pi-zai/releases/tag/v0.1.0

@@ -302,9 +302,10 @@ describe("openai-completions tool_choice", () => {
 			expect(model.compat?.supportsReasoningEffort).toBe(true);
 			expect(model.thinkingLevelMap).toEqual({
 				minimal: null,
-				low: "high",
-				medium: "high",
+				low: null,
+				medium: null,
 				high: "high",
+				xhigh: null,
 				max: "max",
 			});
 		}
@@ -313,8 +314,6 @@ describe("openai-completions tool_choice", () => {
 	it("maps z.ai GLM-5.2 thinking levels to reasoning_effort", async () => {
 		const model = getModel("zai", "glm-5.2")!;
 		const cases = [
-			{ reasoning: "low", effort: "high" },
-			{ reasoning: "medium", effort: "high" },
 			{ reasoning: "high", effort: "high" },
 			{ reasoning: "max", effort: "max" },
 		] as const;
@@ -343,13 +342,80 @@ describe("openai-completions tool_choice", () => {
 			).result();
 
 			const params = (payload ?? mockState.lastParams) as { thinking?: unknown; reasoning_effort?: string };
-			expect(params.thinking).toEqual({ type: "enabled", clear_thinking: false });
+			expect(params.thinking).toEqual({ type: "enabled", clear_thinking: true });
 			expect(params.reasoning_effort).toBe(testCase.effort);
 		}
 	});
 
-	it("preserves z.ai thinking when replaying reasoning_content", async () => {
+	it("does not replay z.ai historical reasoning by default", async () => {
 		const model = getModel("zai", "glm-5.2")!;
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			api: "openai-completions",
+			provider: "zai",
+			model: "glm-5.2",
+			content: [
+				{ type: "thinking", thinking: "prior reasoning", thinkingSignature: "reasoning_content" },
+				{ type: "toolCall", id: "call_1", name: "read", arguments: { path: "README.md" } },
+			],
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "toolUse",
+			timestamp: Date.now(),
+		};
+		const toolResult: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "call_1",
+			toolName: "read",
+			content: [{ type: "text", text: "contents" }],
+			isError: false,
+			timestamp: Date.now(),
+		};
+		let payload: unknown;
+
+		await streamSimple(
+			model,
+			{
+				messages: [
+					{ role: "user", content: "Read README.md", timestamp: Date.now() },
+					assistantMessage,
+					toolResult,
+					{ role: "user", content: "Continue", timestamp: Date.now() },
+				],
+			},
+			{
+				apiKey: "test",
+				reasoning: "high",
+				onPayload: (params: unknown) => {
+					payload = params;
+				},
+			},
+		).result();
+
+		const params = (payload ?? mockState.lastParams) as {
+			messages?: Array<Record<string, unknown>>;
+			thinking?: unknown;
+		};
+		const replayedAssistant = params.messages?.find((message) => message.role === "assistant");
+		expect(replayedAssistant).not.toHaveProperty("reasoning_content");
+		expect(params.thinking).toEqual({ type: "enabled", clear_thinking: true });
+	});
+
+	it("replays z.ai historical reasoning when preserve thinking is enabled", async () => {
+		const baseModel = getModel("zai", "glm-5.2")!;
+		const model = {
+			...baseModel,
+			compat: {
+				...baseModel.compat,
+				zaiPreserveThinking: true,
+			},
+		} as const;
 		const assistantMessage: AssistantMessage = {
 			role: "assistant",
 			api: "openai-completions",
@@ -432,7 +498,7 @@ describe("openai-completions tool_choice", () => {
 		).result();
 
 		const params = (payload ?? mockState.lastParams) as { thinking?: unknown; reasoning_effort?: string };
-		expect(params.thinking).toEqual({ type: "disabled" });
+		expect(params.thinking).toEqual({ type: "disabled", clear_thinking: true });
 		expect(params.reasoning_effort).toBeUndefined();
 	});
 
@@ -1245,6 +1311,7 @@ describe("openai-completions tool_choice", () => {
 				vercelGatewayRouting: {},
 				chatTemplateKwargs: {},
 				zaiToolStream: false,
+				zaiPreserveThinking: false,
 				supportsStrictMode: true,
 				sendSessionAffinityHeaders: false,
 				supportsLongCacheRetention: true,
