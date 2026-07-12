@@ -43,16 +43,30 @@ Session usage totals with Z.AI interpretation:
 - uncached input, cacheRead, cacheWrite, output
 - hit ratio
 - Platform: estimated dollar cost
-- Coding Plan: `subscription-managed`
+- Coding Plan: `subscription-managed` plus live quota (5h / weekly / MCP) from monitor API
 
 ## `/zai-doctor`
 
 Offline integration checks:
 
-- GLM-5.2 thinking level map
+- GLM-5.2 thinking level map (when `reasoning_effort` supported)
 - Platform pricing metadata
 - compaction policy presence
 - fingerprint utilities
+- cache affinity header (`X-Session-Id`)
+- connection stability probe (3 chat completions)
+- Pi retry settings advice
 - optional live `/models` probe when credentials exist
 
 Network probes use configured auth headers and omit secrets from output.
+
+## Benchmark
+
+From `packages/pi-zai` after build:
+
+```bash
+export ZAI_API_KEY='...'
+npm run benchmark:cache-affinity
+```
+
+Compares warm-turn cache hit rate: stable `X-Session-Id` vs none vs rotating (anti-affinity control). Optional JSON via `PI_ZAI_AB_OUTPUT`.

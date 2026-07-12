@@ -31,9 +31,11 @@ Select a Z.AI model in Pi, then verify:
 | Feature | Description |
 |---------|-------------|
 | Platform provider | Registers `zai-platform` with verified per-model pricing metadata |
-| Cache optimizer | Tracks implicit prefix reuse; no invented cache breakpoints |
+| Cache optimizer | Tracks implicit prefix reuse; `X-Session-Id` affinity for warm nodes |
+| Coding Plan quota | `/zai-usage` shows 5h / weekly / MCP budget from monitor API |
 | Cost-first thinking | `clear_thinking=true` by default; no historical reasoning replay |
 | Compaction policy | Z.AI-aware summary structure; drops hidden reasoning |
+| Connection resilience | Doctor probes, retry advice, hints after connection errors |
 | Operator commands | `/zai`, `/zai-endpoint`, `/zai-cache`, `/zai-usage`, `/zai-doctor` |
 
 ## Documentation

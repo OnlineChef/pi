@@ -233,5 +233,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		// Z.AI load-balances on X-Session-Id; a stable id pins requests to the
 		// same backend node so the implicit prefix cache stays warm.
 		event.headers["X-Session-Id"] = sessionState.sessionAffinityId;
+		event.headers["User-Agent"] = `pi-zai/${EXTENSION_VERSION}`;
+		event.headers["Accept-Language"] = "en-US,en";
 	});
 }

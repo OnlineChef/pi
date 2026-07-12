@@ -12,6 +12,11 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 - Footer throughput via native Pi `setStatus` (`statusTps`, last tok/s with optional session avg)
 - Full throughput telemetry in `/zai` (last TPS, TTFT, session average)
 - Full documentation set under `docs/`
+- Coding Plan quota via monitor API in `/zai-usage` (5h / weekly / MCP windows)
+- `X-Session-Id` cache-affinity and `User-Agent` headers on Z.AI provider requests
+- Connection stability probe and Pi retry settings check in `/zai-doctor`
+- Actionable connection-error hints on `agent_settled` after retries exhaust
+- Live cache-affinity A/B benchmark (`npm run benchmark:cache-affinity`)
 
 ### Changed
 
