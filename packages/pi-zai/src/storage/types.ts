@@ -76,6 +76,25 @@ export interface CleanupResult {
 	ran: boolean;
 }
 
+export type AnonymousProviderModelSummary = {
+	provider: string;
+	model: string;
+	endpointKind: string;
+	attempts: number;
+	errors: number;
+};
+
+export type AnonymousDailySummary = {
+	attempts: number;
+	errors: number;
+	inputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	outputTokens: number;
+	byProviderModel: AnonymousProviderModelSummary[];
+	errorCategories: Record<string, number>;
+};
+
 export interface MetricsStorage {
 	readonly kind: MetricsStorageKind;
 	initialize(): void;
@@ -95,6 +114,11 @@ export interface MetricsStorage {
 	exportData(format: MetricsExportFormat, filter?: UsageFilter): string;
 	vacuum(): void;
 	close(): void;
+	getAnonymousDailySummary(day: string): AnonymousDailySummary | undefined;
+	listTelemetryDays(): string[];
+	listPendingTelemetryDays(now?: number): string[];
+	isTelemetryDayUploaded(day: string): boolean;
+	markTelemetryDayUploaded(day: string, uploadedAt: number): void;
 }
 
 export const EMPTY_USAGE_SUMMARY: UsageSummary = {

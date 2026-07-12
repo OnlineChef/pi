@@ -19,7 +19,10 @@ Global: `~/.pi/agent/settings.json` (via Pi `getAgentDir()`)
       "rollupRetentionDays": 180,
       "maxDatabaseBytes": 33554432
     },
-    "telemetry": { "mode": "off" }
+    "telemetry": {
+      "mode": "off",
+      "ingestUrl": "https://api.chefgroep.online/pi-zai/telemetry/v1/aggregate"
+    }
   }
 }
 ```
@@ -27,6 +30,15 @@ Global: `~/.pi/agent/settings.json` (via Pi `getAgentDir()`)
 Project settings override global settings. pi-zai does not read `PI_ZAI_*` environment variables.
 
 How metrics and telemetry fit together: [Architecture](architecture.md). Allowlists and wipe commands: [Security](security.md).
+
+## Telemetry
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| `telemetry.mode` | `off` | `aggregate` allows uploads after `/zai-telemetry enable` |
+| `telemetry.ingestUrl` | production URL | Override for staging or self-hosted worker |
+
+Consent is stored separately at `~/.pi/agent/state/pi-zai/telemetry.consent.json`. `/zai-telemetry disable` removes it without changing settings.
 
 ## Credentials (Pi native)
 
@@ -65,7 +77,7 @@ On `/reload`, the extension:
 
 | Hook | Behavior |
 |------|----------|
-| `session_start` | Init state; load settings; reset cache on new session |
+| `session_start` | Init state; load settings; reset cache on new session; sync pending telemetry when opted in |
 | `model_select` | Update endpoint and credential source |
 | `before_agent_start` | Update cache segment fingerprints |
 | `message_start` / `message_update` / `message_end` | Track assistant throughput (TPS, TTFT) |

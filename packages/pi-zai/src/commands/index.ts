@@ -9,6 +9,7 @@ import { registerZaiDoctorCommand } from "./doctor.ts";
 import { registerZaiEndpointCommand } from "./endpoint.ts";
 import { registerZaiPrivacyCommand } from "./privacy.ts";
 import { registerZaiStatusCommand } from "./status.ts";
+import { registerZaiTelemetryCommand } from "./telemetry.ts";
 import { registerZaiTransportCommand } from "./transport.ts";
 import { registerZaiUsageCommand } from "./usage.ts";
 
@@ -25,6 +26,7 @@ export function registerZaiCommands(pi: ExtensionAPI, deps: ZaiCommandDeps): voi
 	registerZaiPrivacyCommand(pi, deps);
 	registerZaiTransportCommand(pi);
 	registerZaiBenchmarkCommand(pi, deps);
+	registerZaiTelemetryCommand(pi, deps);
 }
 
 export function createDefaultZaiCommandDeps(extensionVersion: string): ZaiCommandDeps {

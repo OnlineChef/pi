@@ -1,5 +1,7 @@
 import type { BenchmarkRunManifest, BenchmarkRunRecord, BenchmarkRunReport } from "../benchmark/types.ts";
+import { summarizeAnonymousDaily, utcDayFromMs } from "./anonymous-daily.ts";
 import {
+	type AnonymousDailySummary,
 	type CleanupResult,
 	EMPTY_TRANSPORT_SUMMARY,
 	EMPTY_USAGE_SUMMARY,
@@ -27,6 +29,7 @@ export class MemoryStorage implements MetricsStorage {
 	private readonly retentionDays: number;
 	private records: ProviderAttemptRecord[] = [];
 	private benchmarkRuns: BenchmarkRunRecord[] = [];
+	private telemetryUploadedDays = new Map<string, number>();
 
 	constructor(options: MemoryStorageOptions = {}) {
 		this.enabled = options.enabled ?? true;
@@ -121,6 +124,7 @@ export class MemoryStorage implements MetricsStorage {
 	clearAll(): void {
 		this.records = [];
 		this.benchmarkRuns = [];
+		this.telemetryUploadedDays.clear();
 	}
 
 	exportData(format: MetricsExportFormat, filter: UsageFilter = {}): string {
@@ -130,6 +134,35 @@ export class MemoryStorage implements MetricsStorage {
 	vacuum(): void {}
 
 	close(): void {}
+
+	getAnonymousDailySummary(day: string): AnonymousDailySummary | undefined {
+		if (!this.enabled) return undefined;
+		const records = this.records.filter((record) => utcDayFromMs(record.occurredAt) === day);
+		if (records.length === 0) return undefined;
+		return summarizeAnonymousDaily(records);
+	}
+
+	listTelemetryDays(): string[] {
+		if (!this.enabled) return [];
+		const days = new Set(this.records.map((record) => utcDayFromMs(record.occurredAt)));
+		return Array.from(days).sort();
+	}
+
+	listPendingTelemetryDays(now = Date.now()): string[] {
+		if (!this.enabled) return [];
+		const today = utcDayFromMs(now);
+		return this.listTelemetryDays().filter((day) => day < today && !this.isTelemetryDayUploaded(day));
+	}
+
+	isTelemetryDayUploaded(day: string): boolean {
+		if (!this.enabled) return false;
+		return this.telemetryUploadedDays.has(day);
+	}
+
+	markTelemetryDayUploaded(day: string, uploadedAt: number): void {
+		if (!this.enabled) return;
+		this.telemetryUploadedDays.set(day, uploadedAt);
+	}
 
 	private filtered(filter: UsageFilter): ProviderAttemptRecord[] {
 		return this.records.filter((record) => {

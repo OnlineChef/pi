@@ -29,6 +29,7 @@ const ZAI_COMMANDS = [
 	"zai-privacy",
 	"zai-transport",
 	"zai-benchmark",
+	"zai-telemetry",
 ] as const;
 
 interface PiZaiHarness {

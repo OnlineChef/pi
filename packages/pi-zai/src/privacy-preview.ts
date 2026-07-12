@@ -1,6 +1,7 @@
 import type { ZaiConfig } from "./config.ts";
 import type { ZaiSessionState } from "./state.ts";
 import type { UsageSummary } from "./storage/types.ts";
+import { isTelemetryUploadEnabled } from "./telemetry/sync.ts";
 
 export type PrivacyPreviewSection = {
 	title: string;
@@ -53,7 +54,7 @@ export function buildAggregateTelemetryPreview(
 	const hitRatio = usage.cacheHitRatio;
 	return {
 		schema: 1,
-		status: "preview-only-not-sent",
+		status: isTelemetryUploadEnabled(config) ? "aggregate-ready" : "preview-only-not-sent",
 		telemetryMode: config.telemetryMode,
 		extensionVersion,
 		model: sessionState.modelId ?? "unknown",
@@ -93,8 +94,11 @@ export function formatPrivacyPreview(
 		{
 			title: "Remote telemetry",
 			lines: [
-				`  mode: ${config.telemetryMode} (uploads disabled)`,
-				"  Future opt-in aggregate preview (not sent):",
+				`  mode: ${config.telemetryMode}`,
+				isTelemetryUploadEnabled(config)
+					? "  uploads: enabled (anonymous daily aggregates)"
+					: "  uploads: disabled (run /zai-telemetry enable after setting mode aggregate)",
+				"  Aggregate preview (current session rollup):",
 				`  ${JSON.stringify(aggregatePreview, null, 2).split("\n").join("\n  ")}`,
 			],
 		},

@@ -1,0 +1,10 @@
+name = "pi-zai-telemetry"
+main = "src/index.ts"
+compatibility_date = "2025-07-01"
+
+[[analytics_engine_datasets]]
+binding = "PI_ZAI_TELEMETRY"
+dataset = "pi_zai_telemetry"
+
+[observability]
+enabled = true

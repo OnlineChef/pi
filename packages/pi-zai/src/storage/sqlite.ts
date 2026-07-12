@@ -2,9 +2,16 @@ import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { BenchmarkRunManifest, BenchmarkRunRecord, BenchmarkRunReport } from "../benchmark/types.ts";
+import {
+	endpointKindFromProvider,
+	mergeAnonymousDailySummaries,
+	summarizeAnonymousDaily,
+	utcDayFromMs,
+} from "./anonymous-daily.ts";
 import { MemoryStorage } from "./memory.ts";
 import { INITIAL_SCHEMA_SQL, SCHEMA_VERSION } from "./migrations.ts";
 import {
+	type AnonymousDailySummary,
 	type CleanupResult,
 	type MetricsExportFormat,
 	type MetricsStorage,
@@ -455,6 +462,146 @@ ORDER BY occurred_at ASC, id ASC`)
 			this.database?.exec("PRAGMA wal_checkpoint(TRUNCATE);");
 			this.database?.exec("VACUUM;");
 		});
+	}
+
+	getAnonymousDailySummary(day: string): AnonymousDailySummary | undefined {
+		if (!this.database) return this.fallback.getAnonymousDailySummary(day);
+		try {
+			const detailRows = this.database
+				.prepare(
+					`SELECT occurred_at, provider, model, endpoint_kind, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, http_status, error_category
+FROM provider_attempts
+WHERE strftime('%Y-%m-%d', occurred_at / 1000, 'unixepoch') = ?`,
+				)
+				.all(day) as SqlRow[];
+			const detailSummary =
+				detailRows.length > 0
+					? summarizeAnonymousDaily(
+							detailRows.map((row) => ({
+								occurredAt: numberValue(row.occurred_at),
+								provider: String(row.provider),
+								model: String(row.model),
+								endpointKind: String(row.endpoint_kind),
+								attempt: 1,
+								extensionVersion: "0.0.0",
+								inputTokens: optionalNumber(row.input_tokens),
+								cacheReadTokens: optionalNumber(row.cache_read_tokens),
+								cacheWriteTokens: optionalNumber(row.cache_write_tokens),
+								outputTokens: optionalNumber(row.output_tokens),
+								httpStatus: optionalNumber(row.http_status),
+								errorCategory: optionalString(row.error_category),
+							})),
+						)
+					: undefined;
+
+			const rollupRows = this.database
+				.prepare(
+					`SELECT provider, model,
+  SUM(attempt_count) AS attempts,
+  SUM(error_count) AS errors,
+  SUM(input_tokens) AS input_tokens,
+  SUM(cache_read_tokens) AS cache_read_tokens,
+  SUM(cache_write_tokens) AS cache_write_tokens,
+  SUM(output_tokens) AS output_tokens
+FROM daily_rollups
+WHERE day = ?
+GROUP BY provider, model`,
+				)
+				.all(day) as SqlRow[];
+
+			const rollupSummary: AnonymousDailySummary | undefined =
+				rollupRows.length > 0
+					? {
+							attempts: rollupRows.reduce((sum, row) => sum + numberValue(row.attempts), 0),
+							errors: rollupRows.reduce((sum, row) => sum + numberValue(row.errors), 0),
+							inputTokens: rollupRows.reduce((sum, row) => sum + numberValue(row.input_tokens), 0),
+							cacheReadTokens: rollupRows.reduce((sum, row) => sum + numberValue(row.cache_read_tokens), 0),
+							cacheWriteTokens: rollupRows.reduce((sum, row) => sum + numberValue(row.cache_write_tokens), 0),
+							outputTokens: rollupRows.reduce((sum, row) => sum + numberValue(row.output_tokens), 0),
+							byProviderModel: rollupRows.map((row) => ({
+								provider: String(row.provider),
+								model: String(row.model),
+								endpointKind: endpointKindFromProvider(String(row.provider)),
+								attempts: numberValue(row.attempts),
+								errors: numberValue(row.errors),
+							})),
+							errorCategories: {},
+						}
+					: undefined;
+
+			const merged = mergeAnonymousDailySummaries(
+				[detailSummary, rollupSummary].filter((summary): summary is AnonymousDailySummary => summary !== undefined),
+			);
+			if (!merged) return undefined;
+
+			const categoryRows = this.database
+				.prepare(
+					`SELECT error_category, COUNT(*) AS count
+FROM provider_attempts
+WHERE strftime('%Y-%m-%d', occurred_at / 1000, 'unixepoch') = ? AND error_category IS NOT NULL
+GROUP BY error_category`,
+				)
+				.all(day) as SqlRow[];
+			for (const row of categoryRows) {
+				const category = optionalString(row.error_category);
+				if (!category) continue;
+				merged.errorCategories[category] = numberValue(row.count);
+			}
+			return merged.attempts > 0 ? merged : undefined;
+		} catch (error) {
+			this.degrade(error);
+			return this.fallback.getAnonymousDailySummary(day);
+		}
+	}
+
+	listTelemetryDays(): string[] {
+		if (!this.database) return this.fallback.listTelemetryDays();
+		try {
+			const rows = this.database
+				.prepare(
+					`SELECT day FROM daily_rollups
+UNION
+SELECT strftime('%Y-%m-%d', occurred_at / 1000, 'unixepoch') AS day FROM provider_attempts
+ORDER BY day ASC`,
+				)
+				.all() as SqlRow[];
+			return rows.map((row) => String(row.day));
+		} catch (error) {
+			this.degrade(error);
+			return this.fallback.listTelemetryDays();
+		}
+	}
+
+	listPendingTelemetryDays(now = Date.now()): string[] {
+		const today = utcDayFromMs(now);
+		return this.listTelemetryDays().filter((day) => day < today && !this.isTelemetryDayUploaded(day));
+	}
+
+	isTelemetryDayUploaded(day: string): boolean {
+		if (!this.database) return this.fallback.isTelemetryDayUploaded(day);
+		try {
+			const row = this.database.prepare("SELECT day FROM telemetry_uploads WHERE day = ?").get(day) as
+				| SqlRow
+				| undefined;
+			return row !== undefined;
+		} catch (error) {
+			this.degrade(error);
+			return this.fallback.isTelemetryDayUploaded(day);
+		}
+	}
+
+	markTelemetryDayUploaded(day: string, uploadedAt: number): void {
+		this.fallback.markTelemetryDayUploaded(day, uploadedAt);
+		if (!this.database) return;
+		try {
+			this.database
+				.prepare(
+					"INSERT INTO telemetry_uploads(day, uploaded_at) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET uploaded_at = excluded.uploaded_at",
+				)
+				.run(day, uploadedAt);
+		} catch (error) {
+			this.degrade(error);
+		}
 	}
 
 	close(): void {

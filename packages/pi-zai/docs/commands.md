@@ -81,7 +81,20 @@ Local transport summary for the current project: attempt count, error count, ave
 
 ## `/zai-privacy preview`
 
-Local privacy report: SQLite allowlist, never-remote fields, disabled remote telemetry mode, and a preview-only aggregate JSON sketch (not sent). Default action is `preview`.
+Local privacy report: SQLite allowlist, never-remote fields, remote telemetry mode, and aggregate JSON preview (sent only when mode + consent are active). Default action is `preview`.
+
+## `/zai-telemetry [action]`
+
+Opt-in anonymous daily aggregate uploads. Requires `zai.telemetry.mode: aggregate` in settings.
+
+| Action | Description |
+|--------|-------------|
+| `status` (default) | Mode, consent file, ingest URL, pending UTC days |
+| `preview [day]` | Local aggregate JSON for a day (not sent) |
+| `enable` | Confirm opt-in; writes consent file |
+| `disable` | Remove consent; stops uploads |
+| `upload [day]` | Upload one completed UTC day |
+| `sync` | Upload all pending completed days |
 
 ## `/zai-benchmark [action]`
 

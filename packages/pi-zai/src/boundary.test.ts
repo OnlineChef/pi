@@ -9,16 +9,26 @@ function readSource(relativePath: string): string {
 }
 
 describe("PR #1 local-only boundary", () => {
-	it("does not define remote telemetry upload endpoints", () => {
+	it("does not define legacy telemetry hostnames in extension index", () => {
 		const indexSource = readSource("index.ts");
 		expect(indexSource).not.toContain("telemetry.pi-zai.chefgroep.online");
-		expect(indexSource).not.toMatch(/fetch\s*\(\s*["']https:\/\/telemetry\./);
 	});
 
-	it("forces telemetry mode off in config loader", () => {
-		const configSource = readSource("config.ts");
-		expect(configSource).toContain('telemetryMode: "off"');
-		expect(configSource).not.toContain('telemetryMode: "aggregate"');
+	it("isolates remote upload fetch to telemetry uploader", () => {
+		const uploaderSource = readSource("telemetry/uploader.ts");
+		expect(uploaderSource).toContain("fetch");
+		expect(readSource("privacy-preview.ts")).not.toMatch(/fetch\s*\(/);
+	});
+});
+
+describe("PR #4 remote telemetry", () => {
+	it("registers zai-telemetry command", () => {
+		expect(readSource("commands/index.ts")).toContain("registerZaiTelemetryCommand");
+	});
+
+	it("supports aggregate telemetry mode in config", () => {
+		expect(readSource("config.ts")).toContain('"aggregate"');
+		expect(readSource("telemetry/consent.ts")).toContain("telemetry.consent.json");
 	});
 });
 

@@ -5,7 +5,7 @@ import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 export type PromptStabilityMode = "off" | "observe" | "safe";
 export type SessionAffinityMode = "off" | "observe" | "experimental";
 export type MetricsMode = "off" | "memory" | "local";
-export type TelemetryMode = "off";
+export type TelemetryMode = "off" | "aggregate";
 
 export interface ZaiMetricsSettings {
 	mode?: MetricsMode;
@@ -20,6 +20,7 @@ export interface ZaiPromptStabilitySettings {
 
 export interface ZaiTelemetrySettings {
 	mode?: TelemetryMode;
+	ingestUrl?: string;
 }
 
 export interface ZaiSettings {
@@ -47,6 +48,7 @@ export interface ZaiConfig {
 	sessionAffinity: SessionAffinityMode;
 	metrics: ZaiMetricsConfig;
 	telemetryMode: TelemetryMode;
+	telemetryIngestUrl?: string;
 }
 
 const DEFAULT_METRICS: ZaiMetricsConfig = {
@@ -59,6 +61,7 @@ const DEFAULT_METRICS: ZaiMetricsConfig = {
 const PROMPT_STABILITY_MODES = new Set<PromptStabilityMode>(["off", "observe", "safe"]);
 const SESSION_AFFINITY_MODES = new Set<SessionAffinityMode>(["off", "observe", "experimental"]);
 const METRICS_MODES = new Set<MetricsMode>(["off", "memory", "local"]);
+const TELEMETRY_MODES = new Set<TelemetryMode>(["off", "aggregate"]);
 
 function readSettingsFile(path: string): Record<string, unknown> | undefined {
 	if (!existsSync(path)) return undefined;
@@ -109,8 +112,21 @@ function loadMetricsConfig(settings: ZaiSettings | undefined): ZaiMetricsConfig 
 	};
 }
 
+function loadTelemetryConfig(settings: ZaiSettings | undefined): { mode: TelemetryMode; ingestUrl?: string } {
+	const telemetry = settings?.telemetry;
+	const ingestUrl =
+		typeof telemetry?.ingestUrl === "string" && telemetry.ingestUrl.trim().length > 0
+			? telemetry.ingestUrl.trim()
+			: undefined;
+	return {
+		mode: parseEnum(telemetry?.mode, TELEMETRY_MODES, "off"),
+		ingestUrl,
+	};
+}
+
 export function loadZaiConfig(cwd = process.cwd()): ZaiConfig {
 	const settings = readZaiSettingsSection(cwd);
+	const telemetry = loadTelemetryConfig(settings);
 
 	return {
 		preserveThinking: settings?.preserveThinking ?? false,
@@ -119,6 +135,7 @@ export function loadZaiConfig(cwd = process.cwd()): ZaiConfig {
 		promptStabilityMode: parseEnum(settings?.promptStability?.mode, PROMPT_STABILITY_MODES, "observe"),
 		sessionAffinity: parseEnum(settings?.sessionAffinity, SESSION_AFFINITY_MODES, "off"),
 		metrics: loadMetricsConfig(settings),
-		telemetryMode: "off",
+		telemetryMode: telemetry.mode,
+		telemetryIngestUrl: telemetry.ingestUrl,
 	};
 }

@@ -91,6 +91,42 @@ describe("MemoryStorage", () => {
 		});
 	});
 
+	it("tracks anonymous daily summaries and telemetry upload state", () => {
+		const storage = new MemoryStorage();
+		const day = "2026-07-11";
+		const occurredAt = Date.parse(`${day}T12:00:00.000Z`);
+		storage.recordAttempt(record({ occurredAt }));
+		storage.recordAttempt(
+			record({
+				occurredAt: occurredAt + 1_000,
+				errorCategory: "timeout_before_headers",
+				httpStatus: 504,
+			}),
+		);
+
+		expect(storage.getAnonymousDailySummary(day)).toMatchObject({
+			attempts: 2,
+			errors: 1,
+			byProviderModel: [{ provider: "zai", model: "glm-5.2", attempts: 2, errors: 1 }],
+			errorCategories: { timeout_before_headers: 1 },
+		});
+		expect(storage.listTelemetryDays()).toEqual([day]);
+		expect(storage.listPendingTelemetryDays(occurredAt + 86_400_000)).toEqual([day]);
+
+		storage.markTelemetryDayUploaded(day, Date.now());
+		expect(storage.isTelemetryDayUploaded(day)).toBe(true);
+		expect(storage.listPendingTelemetryDays(occurredAt + 86_400_000)).toEqual([]);
+	});
+
+	it("does not expose telemetry data when metrics are off", () => {
+		const storage = new MemoryStorage({ enabled: false });
+		storage.recordAttempt(record());
+		expect(storage.getAnonymousDailySummary("2026-07-11")).toBeUndefined();
+		expect(storage.listTelemetryDays()).toEqual([]);
+		expect(storage.listPendingTelemetryDays()).toEqual([]);
+		expect(storage.isTelemetryDayUploaded("2026-07-11")).toBe(false);
+	});
+
 	it("filters usage and transport summaries by project and since", () => {
 		const storage = new MemoryStorage();
 		const baseline = Date.now();
@@ -151,6 +187,21 @@ describe("NodeSqliteStorage", () => {
 		storage.recordAttempt(record());
 		storage.clearAll();
 		expect(storage.getStatus()).toMatchObject({ detailRows: 0, rollupRows: 0, benchmarkRows: 0 });
+		storage.close();
+	});
+
+	it("persists telemetry upload markers in sqlite", () => {
+		const storage = sqliteStorage();
+		const day = "2026-07-10";
+		const occurredAt = Date.parse(`${day}T08:00:00.000Z`);
+		storage.recordAttempt(record({ occurredAt }));
+
+		expect(storage.getAnonymousDailySummary(day)?.attempts).toBe(1);
+		expect(storage.listPendingTelemetryDays(occurredAt + 86_400_000)).toEqual([day]);
+
+		storage.markTelemetryDayUploaded(day, Date.now());
+		expect(storage.isTelemetryDayUploaded(day)).toBe(true);
+		expect(storage.listPendingTelemetryDays(occurredAt + 86_400_000)).toEqual([]);
 		storage.close();
 	});
 

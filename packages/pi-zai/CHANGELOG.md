@@ -14,6 +14,23 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 ### Removed
 
+## [0.3.0] - 2026-07-12
+
+### Added
+
+- Opt-in anonymous daily aggregate telemetry (`zai.telemetry.mode: aggregate`)
+- `/zai-telemetry` command: `status`, `preview`, `enable`, `disable`, `upload`, `sync`
+- Telemetry consent file at `~/.pi/agent/state/pi-zai/telemetry.consent.json`
+- Client uploader with forbidden-field validation before POST
+- Anonymous daily rollup helpers and `telemetry_uploads` tracking in SQLite
+- Cloudflare Worker ingest scaffold (`worker/telemetry/`) → Analytics Engine `pi_zai_telemetry`
+
+### Changed
+
+- `zai.telemetry.mode` and optional `telemetry.ingestUrl` now read from settings (default `off`)
+- `/zai-privacy preview` shows upload readiness when mode + consent are active
+- Completed UTC days upload on session start or `/zai-telemetry sync`
+
 ## [0.2.0] - 2026-07-12
 
 ### Breaking Changes

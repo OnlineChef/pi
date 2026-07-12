@@ -2,14 +2,14 @@
 
 **Z.AI for Pi** — cache intelligence, cost-first thinking, local operator metrics, and production diagnostics on top of Pi's native Z.AI providers.
 
-Works with Pi **>= 0.80.0**. Current version: **0.2.0**.
+Works with Pi **>= 0.80.0**. Current version: **0.3.0**.
 
 ## Why pi-zai
 
 - **See your cache** — implicit prefix reuse, segment fingerprints, low-hit recommendations ([Z.AI caching](https://docs.z.ai/guides/capabilities/cache.md)).
 - **Spend less by default** — `clear_thinking=true`, no historical reasoning replay unless you opt in.
 - **Operate with confidence** — `/zai-doctor`, quota via `/zai-usage`, connection hints, local latency summaries.
-- **Privacy-first metrics** — SQLite on your machine; **no remote telemetry uploads** in this release.
+- **Privacy-first metrics** — SQLite on your machine; **opt-in** remote aggregates only when you enable them.
 
 pi-zai **extends** Pi's native `zai` / `zai-coding-cn` path. It does not replace Pi's runtime, streaming, or thinking controls.
 
@@ -43,16 +43,17 @@ Set credentials the Pi way (`/login`, `auth.json`, `models.json`, or `ZAI_API_KE
 | **Benchmarks** | A0–A3 manifest + `/zai-benchmark` run tracking |
 | **Platform API** | Catalog helpers — register `zai-platform` in `models.json` yourself |
 
-## Privacy promise (v0.2.0)
+## Privacy promise (v0.3.0)
 
 | Data path | Status |
 |-----------|--------|
 | Z.AI API (chat) | Normal Pi provider traffic when you use Z.AI |
 | Local metrics | On by default — counts & hashes only, **no prompts/code** |
-| Remote telemetry | **Off** — not implemented; cannot be enabled via settings |
+| Remote telemetry | **Off by default** — opt-in daily anonymous aggregates |
 
 ```text
-/zai-privacy preview    # allowlist + future aggregate sketch (never sent)
+/zai-privacy preview    # allowlist + aggregate preview (not sent until enabled)
+/zai-telemetry status   # mode, consent, pending upload days
 /zai-data status        # local SQLite row counts
 /zai-data clear-all     # wipe metrics + rotate local project secret
 ```
@@ -86,7 +87,7 @@ Switch: `/zai-endpoint coding|platform` or Pi model picker.
 | Setting | Default | Notes |
 |---------|---------|-------|
 | `metrics.mode` | `local` | `off` / `memory` / `local` SQLite |
-| `telemetry.mode` | `off` | Hardcoded — uploads not available |
+| `telemetry.mode` | `off` | `aggregate` enables uploads after `/zai-telemetry enable` |
 | `sessionAffinity` | `off` | `experimental` → `X-Session-Id` header |
 | `promptStability.mode` | `observe` | `safe` normalizes below dynamic marker |
 
@@ -108,7 +109,7 @@ Switch: `/zai-endpoint coding|platform` or Pi model picker.
 
 ## Is remote telemetry ready?
 
-**No.** v0.2.0 ships local metrics only. Remote aggregate telemetry (opt-in, CF Worker) is designed but not implemented. See the readiness table in [Architecture](docs/architecture.md#3-remote-telemetry-not-shipped).
+**Yes, opt-in.** v0.3.0 ships the client uploader, `/zai-telemetry`, and a Cloudflare Worker scaffold. Default is off. Enable with `zai.telemetry.mode: aggregate` + `/zai-telemetry enable`. Production ingest requires deploying `worker/telemetry/` and binding the route on `api.chefgroep.online`. See [Architecture](docs/architecture.md#3-remote-telemetry-opt-in-v030).
 
 ## Development
 

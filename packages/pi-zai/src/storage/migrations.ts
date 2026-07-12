@@ -70,4 +70,9 @@ ON provider_attempts(project_id, occurred_at);
 
 CREATE INDEX IF NOT EXISTS attempts_by_query
 ON provider_attempts(query_id, attempt);
+
+CREATE TABLE IF NOT EXISTS telemetry_uploads (
+  day TEXT PRIMARY KEY,
+  uploaded_at INTEGER NOT NULL
+) STRICT;
 `;

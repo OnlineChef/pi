@@ -9,6 +9,7 @@ packages/pi-zai/
   src/           Extension source (TypeScript, strip-only)
   dist/          Build output (published to npm)
   docs/          User and operator documentation
+  worker/        Cloudflare Worker ingest (telemetry)
   scripts/       Live benchmarks (cache-affinity A/B)
   test/          Vitest unit tests (*.test.ts next to modules)
 ```
@@ -63,7 +64,7 @@ Project settings example (`.pi/settings.json`):
 }
 ```
 
-`telemetry.mode` in settings is ignored — always off until PR #4.
+Opt-in remote telemetry: set `"telemetry": { "mode": "aggregate" }`, `/reload`, then `/zai-telemetry enable`.
 
 ## Live cache-affinity benchmark
 
@@ -83,9 +84,20 @@ This is separate from `/zai-benchmark` (manifest A0–A3, local SQLite run track
 
 Source-level guards in `src/boundary.test.ts`:
 
-- No remote telemetry upload URLs in extension code
-- `telemetryMode` forced off in config loader
+- Remote `fetch` isolated to `telemetry/uploader.ts`
 - Privacy preview does not call `fetch`
+- `zai-telemetry` command and aggregate mode in config
+
+## Telemetry worker deploy
+
+```bash
+cd packages/pi-zai/worker/telemetry
+npm install
+npm run check
+npx wrangler deploy
+```
+
+Bind route `api.chefgroep.online/pi-zai/telemetry/v1/aggregate` to the deployed worker. Requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
 ## Release (maintainers)
 
@@ -97,8 +109,6 @@ npm pack --dry-run
 ```
 
 Changelog: `packages/pi-zai/CHANGELOG.md`. Breaking changes → minor bump (0.2.0+).
-
-**Remote telemetry is not a release blocker** until PR #4 is implemented and documented.
 
 ## Sync standalone repo
 

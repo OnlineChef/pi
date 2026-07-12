@@ -41,6 +41,7 @@ import {
 } from "./state.ts";
 import { createMetricsStorage, projectIdForCwd } from "./storage/index.ts";
 import { clearZaiStatus, updateZaiTpsStatus } from "./telemetry/status.ts";
+import { isTelemetryUploadEnabled, syncPendingTelemetry } from "./telemetry/sync.ts";
 
 export { loadZaiConfig, type ZaiConfig } from "./config.ts";
 export { formatPiCredentialSource } from "./credentials.ts";
@@ -67,7 +68,7 @@ export {
 	type ZaiSessionState,
 } from "./state.ts";
 
-const EXTENSION_VERSION = "0.2.0";
+const EXTENSION_VERSION = "0.3.0";
 
 function clampThinkingForModel(pi: ExtensionAPI, model: Model<any> | undefined): void {
 	if (!model?.reasoning) return;
@@ -171,6 +172,14 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		const storage = getMetricsStorage();
 		if (storage && shouldRunDailyMetricsCleanup()) {
 			storage.runCleanup(Date.now());
+		}
+
+		if (storage && isTelemetryUploadEnabled(config)) {
+			void syncPendingTelemetry({
+				config,
+				extensionVersion: EXTENSION_VERSION,
+				storage,
+			});
 		}
 
 		updateSessionFromModel(ctx.model, pi.getThinkingLevel());

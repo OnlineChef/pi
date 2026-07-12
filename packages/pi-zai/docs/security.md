@@ -8,9 +8,9 @@ pi-zai is a Z.AI-only Pi extension. This page describes what data leaves your ma
 |-------|--------|-----------------|
 | **Z.AI API** | Always (when you chat) | Prompts and completions to Z.AI per Pi's normal provider flow |
 | **Local metrics** | On by default (`zai.metrics.mode: local`) | SQLite on your machine only |
-| **Remote telemetry** | **Not shipped** | No uploader, no Worker, no opt-in — `zai.telemetry.mode` is always `off` |
+| **Remote telemetry** | **Opt-in** (default off) | Anonymous daily aggregates to Online Chef Groep when enabled |
 
-**Remote telemetry is not ready in v0.2.0.** Only a local preview exists. See [Architecture — remote telemetry](architecture.md#3-remote-telemetry-not-shipped).
+**Remote telemetry is off by default in v0.3.0.** Enable via settings + `/zai-telemetry enable`. See [Architecture — remote telemetry](architecture.md#3-remote-telemetry-opt-in-v030).
 
 Inspect your setup anytime:
 
@@ -105,7 +105,13 @@ Retention: `retentionDays`, `rollupRetentionDays`, `maxDatabaseBytes` in setting
 | `/zai-data clear-all` | Wipe all local pi-zai metrics **and rotate** `local.secret` |
 | `/zai-data vacuum` | SQLite maintenance |
 | `/zai-transport` | Local latency and error-category summary |
-| `/zai-privacy preview` | Allowlist, never-remote list, disabled remote mode |
+| `/zai-privacy preview` | Allowlist, never-remote fields, remote telemetry mode |
+| `/zai-telemetry status` | Mode, consent, pending upload days |
+| `/zai-telemetry enable` | Opt-in confirm (requires `telemetry.mode: aggregate`) |
+| `/zai-telemetry disable` | Remove consent file |
+| `/zai-telemetry preview [day]` | Local aggregate JSON for a UTC day (not sent) |
+| `/zai-telemetry upload [day]` | Upload one completed day |
+| `/zai-telemetry sync` | Upload all pending completed days |
 
 ## Prompt fingerprinting
 
@@ -125,22 +131,40 @@ With `zai.promptStability.mode: "safe"`, content below an explicit `--- dynamic 
 
 `/zai-usage` calls Z.AI monitor APIs for Coding Plan quota when credentials exist.
 
-**No pi-zai code uploads metrics to Online Chef Groep or third-party telemetry endpoints in the current release.**
+**pi-zai uploads metrics only when you opt in** (`zai.telemetry.mode: aggregate` + `/zai-telemetry enable`). Default is no remote uploads.
 
-## Remote telemetry (not implemented)
+## Remote telemetry (opt-in)
 
-`zai.telemetry.mode` is hardcoded to `"off"`. Settings cannot enable uploads.
+Default: `zai.telemetry.mode: "off"`. When enabled:
 
-`/zai-privacy preview` may show a **preview-only** JSON bucket sketch (`status: preview-only-not-sent`). That object is rendered locally and **never transmitted**.
+1. Set `"telemetry": { "mode": "aggregate" }` in settings and `/reload`
+2. Run `/zai-telemetry enable` and confirm the prompt
+3. Completed UTC days upload on session start or `/zai-telemetry sync`
 
-### Planned opt-in aggregate telemetry (future release)
+Consent file: `~/.pi/agent/state/pi-zai/telemetry.consent.json`. Disable with `/zai-telemetry disable` (settings mode unchanged).
 
-When implemented:
+### Uploaded fields (allowlist)
 
-- Explicit opt-in only (default off)
-- Anonymous daily buckets only (turn counts, cache-ratio bands, error categories)
-- No prompts, code, paths, install IDs, or fingerprints
-- Ingest via Cloudflare Worker to Analytics Engine (no direct client access to D1/R2)
+| Field | Purpose |
+|-------|---------|
+| `day` | UTC date |
+| `extensionVersion`, `promptMode` | Build and stability mode |
+| `attempts`, `errors` | Daily counts |
+| Token counters | `input`, `cacheRead`, `cacheWrite`, `output` |
+| `turnBucket`, `cacheRatioBucket`, `retryRateBucket` | Bucketed bands only |
+| `byProviderModel[]` | Provider/model/endpoint counts |
+| `errorCategories{}` | Controlled category labels |
+
+### Never uploaded
+
+- Prompts, code, paths, install IDs, API keys
+- Project/session/query IDs, fingerprints
+- Raw provider error bodies
+- IP address as an application field
+
+`/zai-privacy preview` shows a local aggregate sketch. Status is `preview-only-not-sent` until mode + consent are active (`aggregate-ready`).
+
+Ingest: `POST https://api.chefgroep.online/pi-zai/telemetry/v1/aggregate` (Cloudflare Worker → Analytics Engine). Override URL with `zai.telemetry.ingestUrl` for staging.
 
 Optional encrypted diagnostic bundles (preview + confirm) are a separate later phase.
 
@@ -152,6 +176,6 @@ Optional encrypted diagnostic bundles (preview + confirm) are a separate later p
 
 The package includes source-level tests that assert:
 
-- No remote telemetry `fetch` URLs in extension code
-- `telemetryMode` forced off in config loader
+- Remote `fetch` isolated to `telemetry/uploader.ts`
 - Privacy preview does not call the network
+- `zai-telemetry` command and aggregate mode registered in config

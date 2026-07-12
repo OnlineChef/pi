@@ -1,6 +1,6 @@
 # Architecture
 
-How pi-zai fits into Pi, what it measures locally, and what is **not** shipped yet.
+How pi-zai fits into Pi, what it measures locally, and optional remote aggregate telemetry.
 
 ## Role in the stack
 
@@ -73,31 +73,37 @@ Retention is bounded (`retentionDays`, `maxDatabaseBytes`). Detail rows roll up 
 
 Full allowlist: [Security](security.md).
 
-### 3. Remote telemetry (not shipped)
+### 3. Remote telemetry (opt-in, v0.3.0+)
 
-**Setting:** `zai.telemetry.mode` — **hardcoded `"off"`** in code. User settings cannot enable uploads in v0.2.0.
+**Setting:** `zai.telemetry.mode` — default `off`. Set to `aggregate` to allow uploads after explicit consent.
 
-| Piece | v0.2.0 status |
+| Piece | v0.3.0 status |
 |-------|----------------|
-| Client daily uploader | **Not built** |
-| `telemetry.mode: aggregate` | **Not available** (forced off) |
-| `/zai-telemetry` commands | **Not built** |
-| Opt-in UI / settings flow | **Not built** |
-| Cloudflare Worker ingest | **Not built** |
-| Analytics Engine / D1 backend | **Not built** |
-| Privacy preview JSON | **Built** — local display only (`preview-only-not-sent`) |
-| Boundary tests (no upload URLs) | **Built** |
+| Client daily uploader | **Built** — `src/telemetry/uploader.ts` |
+| `telemetry.mode: aggregate` | **Available** via settings |
+| `/zai-telemetry` commands | **Built** — status, preview, enable, disable, upload, sync |
+| Opt-in flow | **Built** — settings mode + `/zai-telemetry enable` confirm |
+| Cloudflare Worker ingest | **Scaffold** — `worker/telemetry/` (deploy + route bind required) |
+| Analytics Engine backend | **Scaffold** — dataset `pi_zai_telemetry` |
+| Privacy preview JSON | **Built** — `preview-only-not-sent` or `aggregate-ready` |
+| Boundary tests | **Built** — fetch isolated to uploader; privacy preview never calls network |
 
-`/zai-privacy preview` shows what a **future** opt-in aggregate payload could look like (bucketed counts only). That JSON is rendered in the terminal and **never sent**.
+**Default remains off.** Uploads run only when both are true:
 
-#### Planned remote design (PR #4+, not implemented)
+1. `zai.telemetry.mode: "aggregate"` in settings
+2. Consent file written by `/zai-telemetry enable`
 
-When built:
+Completed UTC days upload on session start or `/zai-telemetry sync`. Payload: anonymous daily aggregates only (turn buckets, cache-ratio bands, error category counts, token totals). Never: prompts, code, fingerprints, install IDs, paths, raw errors.
 
-- Explicit opt-in (default off)
-- Daily anonymous aggregates only: turn buckets, cache-ratio bands, error category counts
-- Never: prompts, code, fingerprints, install IDs, paths, raw errors
-- Ingest via Cloudflare Worker → Analytics Engine (no direct client access to D1/R2)
+**Ingest URL:** `https://api.chefgroep.online/pi-zai/telemetry/v1/aggregate` (override with `zai.telemetry.ingestUrl`).
+
+#### Aggregate payload (schema 1)
+
+- `day`, `extensionVersion`, `promptMode`
+- `attempts`, `errors`, token counters
+- `turnBucket`, `cacheRatioBucket`, `retryRateBucket`
+- `byProviderModel[]`, `errorCategories{}`
+- No project/session/query IDs or fingerprints
 
 Encrypted diagnostic bundles (preview + confirm) are a separate optional later phase (PR #5).
 

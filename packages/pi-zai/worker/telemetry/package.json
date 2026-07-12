@@ -1,0 +1,14 @@
+{
+	"name": "pi-zai-telemetry-worker",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check": "tsc --noEmit",
+		"deploy": "wrangler deploy"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "4.20250710.0",
+		"typescript": "5.9.3",
+		"wrangler": "4.24.3"
+	}
+}
