@@ -26,7 +26,7 @@ Global: `~/.pi/agent/settings.json` (via Pi `getAgentDir()`)
 
 Project settings override global settings. pi-zai does not read `PI_ZAI_*` environment variables.
 
-Local metrics and remote telemetry boundaries: [Security](security.md).
+How metrics and telemetry fit together: [Architecture](architecture.md). Allowlists and wipe commands: [Security](security.md).
 
 ## Credentials (Pi native)
 

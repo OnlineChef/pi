@@ -13,14 +13,7 @@ pi install npm:@onlinechefgroep/pi-zai
 /reload
 ```
 
-From the monorepo during development:
-
-```bash
-cd packages/pi-zai
-npm run build
-pi install file:/absolute/path/to/packages/pi-zai
-/reload
-```
+Contributors: see [Development](development.md) for monorepo install and testing.
 
 ## Credentials
 
@@ -65,8 +58,19 @@ Switch at any time:
 
 The active endpoint always follows the selected model's provider. There is no hidden endpoint state.
 
+## Privacy check (recommended)
+
+```text
+/zai-privacy preview
+/zai-data status
+```
+
+Read [Architecture](architecture.md) for how local metrics relate to Z.AI API traffic and why remote telemetry is off.
+
 ## Next steps
 
+- [Architecture](architecture.md) — how pi-zai fits Pi and what is stored where
+- [Security](security.md) — allowlists and wipe commands
 - [Cache optimization](cache-optimization.md) — improve hit ratio and lower cost
 - [Thinking](thinking.md) — native levels and preserve opt-in
 - [Commands](commands.md) — full slash command reference

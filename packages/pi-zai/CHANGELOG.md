@@ -38,7 +38,9 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 - Safe prompt normalization when `zai.promptStability.mode: "safe"` and dynamic marker present
 - Benchmark run tracking: `/zai-benchmark start|complete|status|report|gates` with SQLite `benchmark_runs`
 - Benchmark turns measured from `attemptsBaseline` at run start; gates use per-scenario turn targets
-- Expanded [Security](docs/security.md): local allowlist, never-remote list, operator commands
+- [Architecture](docs/architecture.md): stack role, request lifecycle, telemetry readiness table
+- [Development](docs/development.md): build, test, benchmark, standalone sync
+- Expanded [Security](docs/security.md) and marketing [README](README.md)
 
 ### Changed
 

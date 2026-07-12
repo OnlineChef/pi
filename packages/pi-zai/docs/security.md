@@ -8,7 +8,9 @@ pi-zai is a Z.AI-only Pi extension. This page describes what data leaves your ma
 |-------|--------|-----------------|
 | **Z.AI API** | Always (when you chat) | Prompts and completions to Z.AI per Pi's normal provider flow |
 | **Local metrics** | On by default (`zai.metrics.mode: local`) | SQLite on your machine only |
-| **Remote telemetry** | **Disabled** | No uploads in current builds (`zai.telemetry.mode` is always `off`) |
+| **Remote telemetry** | **Not shipped** | No uploader, no Worker, no opt-in — `zai.telemetry.mode` is always `off` |
+
+**Remote telemetry is not ready in v0.2.0.** Only a local preview exists. See [Architecture — remote telemetry](architecture.md#3-remote-telemetry-not-shipped).
 
 Inspect your setup anytime:
 
