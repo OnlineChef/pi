@@ -36,7 +36,9 @@ Select a Z.AI model in Pi, then verify:
 | Cost-first thinking | `clear_thinking=true` by default; no historical reasoning replay |
 | Compaction policy | Z.AI-aware summary structure; drops hidden reasoning |
 | Connection resilience | Doctor probes, retry advice, hints after connection errors |
-| Operator commands | `/zai`, `/zai-endpoint`, `/zai-cache`, `/zai-usage`, `/zai-doctor` |
+| Operator commands | `/zai`, `/zai-endpoint`, `/zai-cache`, `/zai-usage`, `/zai-doctor`, `/zai-data`, `/zai-transport`, `/zai-privacy`, `/zai-benchmark` |
+| Local metrics | Privacy-reduced Z.AI attempt records in local SQLite (default on) |
+| Remote telemetry | Disabled — no uploads (`zai.telemetry.mode` always `off`) |
 
 ## Documentation
 
@@ -48,7 +50,7 @@ Select a Z.AI model in Pi, then verify:
 | [Commands](docs/commands.md) | Slash command reference |
 | [Configuration](docs/configuration.md) | Settings, env vars, endpoints |
 | [Troubleshooting](docs/troubleshooting.md) | Common failures and fixes |
-| [Security](docs/security.md) | Credential handling and diagnostics rules |
+| [Security](docs/security.md) | Credentials, local metrics allowlist, remote telemetry boundary |
 
 ## Native thinking
 
@@ -107,7 +109,23 @@ Details: [Cache optimization](docs/cache-optimization.md).
 | `zai.statusTps` | `true` | Show last throughput in Pi footer |
 | `zai.sessionAffinity` | `off` | `experimental` enables `X-Session-Id` header |
 | `zai.metrics.mode` | `local` | `off` / `memory` / `local` SQLite metrics |
-| `zai.telemetry.mode` | `off` | Remote telemetry not implemented yet |
+| `zai.telemetry.mode` | `off` | Hardcoded off — no remote uploads |
+| `zai.promptStability.mode` | `observe` | `off` / `observe` / `safe` (normalize below dynamic marker) |
+
+## Privacy at a glance
+
+- **Z.AI API**: normal Pi provider traffic when you chat.
+- **Local metrics** (default): token counts, latency, error categories, short fingerprints — SQLite under `~/.pi/agent/state/pi-zai/`.
+- **Never stored**: prompts, code, reasoning, paths, keys, raw error bodies.
+- **Remote telemetry**: not implemented; `/zai-privacy preview` shows what a future opt-in aggregate *could* look like (never sent).
+
+```text
+/zai-privacy preview
+/zai-data status
+/zai-data clear-all   # wipe + rotate local project secret
+```
+
+Details: [Security](docs/security.md).
 
 ## Development
 

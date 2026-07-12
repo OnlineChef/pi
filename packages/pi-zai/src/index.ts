@@ -67,7 +67,7 @@ export {
 	type ZaiSessionState,
 } from "./state.ts";
 
-const EXTENSION_VERSION = "0.1.1";
+const EXTENSION_VERSION = "0.2.0";
 
 function clampThinkingForModel(pi: ExtensionAPI, model: Model<any> | undefined): void {
 	if (!model?.reasoning) return;

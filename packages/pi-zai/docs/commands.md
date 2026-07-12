@@ -60,7 +60,46 @@ Offline integration checks:
 
 Network probes use configured auth headers and omit secrets from output.
 
-## Benchmark
+## `/zai-data [action]`
+
+Local Z.AI attempt metrics (SQLite by default). See [Security](security.md) for the field allowlist.
+
+| Action | Description |
+|--------|-------------|
+| `status` (default) | Storage kind, paths, row counts, project/session hashes |
+| `clear-project` | Delete metrics for the current project hash |
+| `clear-details` | Delete detail rows; keep daily rollups |
+| `clear-benchmarks` | Delete benchmark run rows |
+| `clear-all` | Wipe all pi-zai metrics and rotate `local.secret` |
+| `export-json <path>` | Export attempts for current project |
+| `export-csv <path>` | CSV export |
+| `vacuum` | SQLite maintenance |
+
+## `/zai-transport`
+
+Local transport summary for the current project: attempt count, error count, average latency (headers, first delta, total), and error categories. No raw error bodies.
+
+## `/zai-privacy preview`
+
+Local privacy report: SQLite allowlist, never-remote fields, disabled remote telemetry mode, and a preview-only aggregate JSON sketch (not sent). Default action is `preview`.
+
+## `/zai-benchmark [action]`
+
+A0–A3 cache benchmark harness and local run tracking.
+
+| Action | Description |
+|--------|-------------|
+| `manifest` (default) | Variants, scenarios, sample gates |
+| `instructions <A0–A3> [scenario]` | Setup steps and settings JSON |
+| `start <A1\|A2\|A3> [scenario]` | Begin a tracked run (records `attemptsBaseline`) |
+| `complete [run-id]` | Finish active run and print gate report |
+| `status` | Recent runs and active run id |
+| `report [run-id]` | Show stored report |
+| `gates` | Completed runs vs sample targets |
+
+A0 is native Pi without pi-zai; use it as control outside this extension.
+
+## Benchmark (live script)
 
 From `packages/pi-zai` after build:
 

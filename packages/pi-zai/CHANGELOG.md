@@ -6,6 +6,18 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 ### Breaking Changes
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.2.0] - 2026-07-12
+
+### Breaking Changes
+
 - pi-zai no longer registers or unregisters Pi's native `zai` / `zai-coding-cn` providers
 - `zai-platform` is not auto-registered; add via `models.json` manually
 - Removed `PI_ZAI_*` environment overrides; use `settings.json` only
@@ -26,6 +38,7 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 - Safe prompt normalization when `zai.promptStability.mode: "safe"` and dynamic marker present
 - Benchmark run tracking: `/zai-benchmark start|complete|status|report|gates` with SQLite `benchmark_runs`
 - Benchmark turns measured from `attemptsBaseline` at run start; gates use per-scenario turn targets
+- Expanded [Security](docs/security.md): local allowlist, never-remote list, operator commands
 
 ### Changed
 
@@ -88,5 +101,6 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 - Credential source names only in diagnostics output; API key values never printed
 
+[0.2.0]: https://github.com/onlinechefgroep/pi-zai/releases/tag/v0.2.0
 [0.1.1]: https://github.com/onlinechefgroep/pi-zai/releases/tag/v0.1.1
 [0.1.0]: https://github.com/onlinechefgroep/pi-zai/releases/tag/v0.1.0

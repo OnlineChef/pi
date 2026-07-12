@@ -25,7 +25,7 @@ export function registerZaiPrivacyCommand(pi: ExtensionAPI, deps: ZaiCommandDeps
 			const storage = getMetricsStorage();
 			const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
 			const usage = storage?.getUsageSummary({ projectId }) ?? { ...EMPTY_USAGE_SUMMARY };
-			ctx.ui.notify(formatPrivacyPreview(config, sessionState, usage), "info");
+			ctx.ui.notify(formatPrivacyPreview(config, deps.extensionVersion, sessionState, usage), "info");
 		},
 	});
 }

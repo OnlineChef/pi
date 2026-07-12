@@ -46,6 +46,7 @@ function bucketCount(value: number, edges: number[]): string {
 
 export function buildAggregateTelemetryPreview(
 	config: ZaiConfig,
+	extensionVersion: string,
 	sessionState: Pick<ZaiSessionState, "provider" | "modelId" | "endpoint" | "promptStability">,
 	usage: UsageSummary,
 ): Record<string, unknown> {
@@ -54,7 +55,7 @@ export function buildAggregateTelemetryPreview(
 		schema: 1,
 		status: "preview-only-not-sent",
 		telemetryMode: config.telemetryMode,
-		extensionVersion: "0.1.1",
+		extensionVersion,
 		model: sessionState.modelId ?? "unknown",
 		endpointKind: sessionState.endpoint,
 		promptMode: config.promptStabilityMode,
@@ -72,13 +73,14 @@ export function buildAggregateTelemetryPreview(
 
 export function formatPrivacyPreview(
 	config: ZaiConfig,
+	extensionVersion: string,
 	sessionState: Pick<
 		ZaiSessionState,
 		"projectId" | "sessionHash" | "provider" | "modelId" | "endpoint" | "promptStability"
 	>,
 	usage: UsageSummary,
 ): string {
-	const aggregatePreview = buildAggregateTelemetryPreview(config, sessionState, usage);
+	const aggregatePreview = buildAggregateTelemetryPreview(config, extensionVersion, sessionState, usage);
 	const sections: PrivacyPreviewSection[] = [
 		{
 			title: "Local SQLite allowlist",

@@ -9,6 +9,7 @@ describe("privacy preview", () => {
 		const config = loadZaiConfig("/tmp");
 		const preview = buildAggregateTelemetryPreview(
 			config,
+			"0.2.0",
 			{
 				provider: "zai",
 				modelId: "glm-5.2",
@@ -26,6 +27,7 @@ describe("privacy preview", () => {
 		const config = loadZaiConfig("/tmp");
 		const text = formatPrivacyPreview(
 			config,
+			"0.2.0",
 			{
 				projectId: "abc123",
 				sessionHash: "def456",
@@ -45,6 +47,7 @@ describe("privacy preview", () => {
 		const config = loadZaiConfig("/tmp");
 		const preview = buildAggregateTelemetryPreview(
 			config,
+			"0.2.0",
 			{ provider: "zai", modelId: "glm-5.2", endpoint: "coding", promptStability: undefined },
 			{ ...EMPTY_USAGE_SUMMARY, attempts: 100, errors: 10, cacheHitRatio: 1 },
 		);
