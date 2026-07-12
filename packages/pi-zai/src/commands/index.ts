@@ -15,7 +15,7 @@ export function registerZaiCommands(pi: ExtensionAPI, deps: ZaiCommandDeps): voi
 	registerZaiStatusCommand(pi, deps);
 	registerZaiEndpointCommand(pi, deps);
 	registerZaiCacheCommand(pi);
-	registerZaiUsageCommand(pi);
+	registerZaiUsageCommand(pi, deps);
 	registerZaiDoctorCommand(pi, deps);
 }
 

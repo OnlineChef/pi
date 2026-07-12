@@ -21,6 +21,10 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 ### Changed
 
 - README restructured with quick start and documentation index
+- `/zai` and `/zai-usage` show extension version; clamp invalid thinking levels for GLM-5.2
+- Quota fetch retries auth schemes and transient network errors
+- TPS uses wall-clock duration (fixes bogus 757000 tok/s)
+- Prompt stability resolves live from system prompt when hook snapshot missing
 
 ## [0.1.0] - 2026-07-12
 
