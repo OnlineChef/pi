@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -19,7 +19,17 @@ import { SettingsManager } from "../../../src/core/settings-manager.ts";
 import { initTheme, type Theme, theme } from "../../../src/modes/interactive/theme/theme.ts";
 import { createTestExtensionsResult, createTestResourceLoader } from "../../utilities.ts";
 
-const ZAI_COMMANDS = ["zai", "zai-cache", "zai-usage", "zai-doctor", "zai-endpoint"] as const;
+const ZAI_COMMANDS = [
+	"zai",
+	"zai-cache",
+	"zai-data",
+	"zai-usage",
+	"zai-doctor",
+	"zai-endpoint",
+	"zai-privacy",
+	"zai-transport",
+	"zai-benchmark",
+] as const;
 
 interface PiZaiHarness {
 	session: AgentSession;
@@ -100,8 +110,19 @@ function registerFauxZaiOnRegistry(
 	return zaiModel;
 }
 
-async function createPiZaiHarness(options: { settings?: Partial<Settings> } = {}): Promise<PiZaiHarness> {
+function writeProjectZaiSettings(tempDir: string, zai: Record<string, unknown>): void {
+	const piDir = join(tempDir, ".pi");
+	mkdirSync(piDir, { recursive: true });
+	writeFileSync(join(piDir, "settings.json"), `${JSON.stringify({ zai }, null, 2)}\n`, "utf-8");
+}
+
+async function createPiZaiHarness(
+	options: { settings?: Partial<Settings>; zaiSettings?: Record<string, unknown> } = {},
+): Promise<PiZaiHarness> {
 	const tempDir = createTempDir();
+	if (options.zaiSettings) {
+		writeProjectZaiSettings(tempDir, options.zaiSettings);
+	}
 	const faux = registerFauxProvider({
 		provider: "zai",
 		models: [{ id: "glm-5.2", name: "GLM-5.2", reasoning: true }],
@@ -223,8 +244,38 @@ describe("pi-zai extension integration", () => {
 		expect(notifications.some((message) => message.includes("Z.AI implicit cache"))).toBe(true);
 	});
 
-	it("sets X-Session-Id and User-Agent via before_provider_headers after bindExtensions", async () => {
+	it("does not auto-register zai-platform on bindExtensions", async () => {
 		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		const before = harness.session.modelRegistry.find("zai-platform", "glm-5.2");
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext(() => {}),
+			mode: "tui",
+		});
+
+		const after = harness.session.modelRegistry.find("zai-platform", "glm-5.2");
+		expect(after).toBe(before);
+	});
+
+	it("does not set X-Session-Id by default", async () => {
+		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext(() => {}),
+			mode: "tui",
+		});
+
+		const headers = await harness.session.extensionRunner.emitBeforeProviderHeaders({});
+
+		expect(headers["X-Session-Id"]).toBeUndefined();
+		expect(headers["User-Agent"]).toMatch(/^pi-zai\//);
+	});
+
+	it("sets X-Session-Id when sessionAffinity is experimental", async () => {
+		const harness = await createPiZaiHarness({ zaiSettings: { sessionAffinity: "experimental" } });
 		harnesses.push(harness);
 
 		await harness.session.bindExtensions({

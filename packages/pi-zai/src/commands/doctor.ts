@@ -172,11 +172,11 @@ export function registerZaiDoctorCommand(pi: ExtensionAPI, deps: ZaiCommandDeps)
 			});
 
 			checks.push({
-				name: "Platform provider registered",
-				status: deps.isPlatformProviderRegistered(ctx) && platformModel ? "pass" : "fail",
+				name: "Platform provider (optional)",
+				status: deps.isPlatformProviderRegistered(ctx) && platformModel ? "pass" : "skip",
 				detail: platformModel
-					? "zai-platform/glm-5.2 registered"
-					: "zai-platform provider or glm-5.2 model missing",
+					? "zai-platform/glm-5.2 present in models.json"
+					: "Not registered by pi-zai; add zai-platform manually via models.json if needed",
 			});
 
 			const credentialProvider = active?.provider ?? "zai";
@@ -235,8 +235,11 @@ export function registerZaiDoctorCommand(pi: ExtensionAPI, deps: ZaiCommandDeps)
 
 			checks.push({
 				name: "Cache affinity header",
-				status: "pass",
-				detail: `X-Session-Id sent to pin requests to a warm cache node (id ${sessionState.sessionAffinityId.slice(0, 12)}...)`,
+				status: config.sessionAffinity === "experimental" ? "pass" : "skip",
+				detail:
+					config.sessionAffinity === "experimental"
+						? `X-Session-Id enabled (id ${sessionState.sessionAffinityId.slice(0, 12)}...)`
+						: "X-Session-Id off (set zai.sessionAffinity=experimental to enable)",
 			});
 
 			checks.push({

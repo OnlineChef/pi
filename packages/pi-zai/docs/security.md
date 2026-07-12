@@ -41,3 +41,31 @@ Never commit credential files. Rotate keys if exposed in chat, logs, or screensh
 ## Preserve thinking warning
 
 Enabling `preserveThinking` replays historical reasoning content in API requests. This increases data sent to Z.AI and may include sensitive intermediate reasoning. Keep disabled unless required.
+
+## Local metrics storage
+
+pi-zai stores privacy-reduced attempt metrics locally under Pi user state:
+
+```text
+~/.pi/agent/state/pi-zai/metrics.sqlite3
+~/.pi/agent/state/pi-zai/local.secret
+```
+
+- `local.secret` is a random 256-bit key used to HMAC project IDs. It is never sent remotely.
+- Project IDs are `HMAC(localSecret, canonicalCwd)` — not reversible path hashes.
+- `/zai-data clear-all` deletes metrics and rotates `local.secret`.
+- Fingerprints (system/tool/payload) stay in local SQLite only.
+
+Manage retention via `zai.metrics` in settings (`mode`, `retentionDays`, `maxDatabaseBytes`).
+
+## Remote telemetry
+
+**Not implemented in PR #1.** `zai.telemetry.mode` accepts only `"off"`.
+
+When remote aggregate telemetry is added in a later release:
+
+- explicit opt-in only (default off)
+- anonymous daily buckets only — no prompts, code, paths, install IDs, or fingerprints
+- ingest via Cloudflare Worker + Analytics Engine (not direct client access to D1/R2)
+
+Diagnostic bundle uploads (encrypted, preview + confirm) are a separate optional later phase.

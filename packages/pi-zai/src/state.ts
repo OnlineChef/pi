@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import type { ExtensionContext, SessionStartEvent, TurnEndEvent } from "@earendil-works/pi-coding-agent";
+import { AttemptTracker } from "./attempt-tracker.ts";
 import { CacheMetricsStore } from "./cache/metrics.ts";
+import { QueryCorrelation } from "./correlation.ts";
+import type { MetricsStorage } from "./storage/types.ts";
 import { TpsTracker } from "./telemetry/tps.ts";
 
 export type ZaiEndpointKind = "coding" | "platform" | "coding-cn" | "unknown";
@@ -14,6 +17,8 @@ export interface ZaiSessionState {
 	modelId: string | undefined;
 	thinkingLevel: ThinkingLevel | undefined;
 	credentialSource: string | undefined;
+	sessionHash: string | undefined;
+	projectId: string | undefined;
 	/**
 	 * Stable per-session id sent as `X-Session-Id` for Z.AI cache affinity.
 	 * Pinning consecutive requests to the same backend node keeps the implicit
@@ -68,6 +73,8 @@ export function createZaiSessionState(preserveThinking = false): ZaiSessionState
 		modelId: undefined,
 		thinkingLevel: undefined,
 		credentialSource: undefined,
+		sessionHash: undefined,
+		projectId: undefined,
 		sessionAffinityId: newSessionAffinityId(),
 		promptStability: undefined,
 	};
@@ -78,6 +85,10 @@ export const sessionState = createZaiSessionState();
 let hookHandlers: ZaiHookHandlers = {};
 let cacheMetricsStore = new CacheMetricsStore();
 let tpsTracker = new TpsTracker();
+let metricsStorage: MetricsStorage | undefined;
+let queryCorrelation = new QueryCorrelation();
+let attemptTracker = new AttemptTracker();
+let lastMetricsCleanupDay: string | undefined;
 
 export function getCacheMetricsStore(): CacheMetricsStore {
 	return cacheMetricsStore;
@@ -87,12 +98,41 @@ export function getTpsTracker(): TpsTracker {
 	return tpsTracker;
 }
 
+export function getMetricsStorage(): MetricsStorage | undefined {
+	return metricsStorage;
+}
+
+export function setMetricsStorage(storage: MetricsStorage | undefined): void {
+	metricsStorage?.close();
+	metricsStorage = storage;
+}
+
+export function getQueryCorrelation(): QueryCorrelation {
+	return queryCorrelation;
+}
+
+export function getAttemptTracker(): AttemptTracker {
+	return attemptTracker;
+}
+
+export function resetCorrelationState(): void {
+	queryCorrelation = new QueryCorrelation();
+	attemptTracker = new AttemptTracker();
+}
+
 export function resetCacheMetrics(): void {
 	cacheMetricsStore = new CacheMetricsStore();
 }
 
 export function resetTpsMetrics(): void {
 	tpsTracker = new TpsTracker();
+}
+
+export function shouldRunDailyMetricsCleanup(now = Date.now()): boolean {
+	const day = new Date(now).toISOString().slice(0, 10);
+	if (lastMetricsCleanupDay === day) return false;
+	lastMetricsCleanupDay = day;
+	return true;
 }
 
 export function setZaiHookHandlers(handlers: ZaiHookHandlers): void {

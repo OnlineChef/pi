@@ -30,7 +30,7 @@ Select a Z.AI model in Pi, then verify:
 
 | Feature | Description |
 |---------|-------------|
-| Platform provider | Registers `zai-platform` with verified per-model pricing metadata |
+| Platform provider | Catalog helpers only; register `zai-platform` yourself via `models.json` |
 | Cache optimizer | Tracks implicit prefix reuse; `X-Session-Id` affinity for warm nodes |
 | Coding Plan quota | `/zai-usage` shows 5h / weekly / MCP budget from monitor API |
 | Cost-first thinking | `clear_thinking=true` by default; no historical reasoning replay |
@@ -104,8 +104,10 @@ Details: [Cache optimization](docs/cache-optimization.md).
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `zai.preserveThinking` | `false` | Replay historical reasoning; reduces cache efficiency |
-| `PI_ZAI_PRESERVE_THINKING` | unset | Env override for preserve thinking |
-| `ZAI_API_KEY` | — | Z.AI key (Coding Plan and Platform via Pi auth) |
+| `zai.statusTps` | `true` | Show last throughput in Pi footer |
+| `zai.sessionAffinity` | `off` | `experimental` enables `X-Session-Id` header |
+| `zai.metrics.mode` | `local` | `off` / `memory` / `local` SQLite metrics |
+| `zai.telemetry.mode` | `off` | Remote telemetry not implemented yet |
 
 ## Development
 

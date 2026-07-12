@@ -62,13 +62,7 @@ Enable in project or global settings:
 }
 ```
 
-Or via environment:
-
-```bash
-export PI_ZAI_PRESERVE_THINKING=1
-```
-
-When enabled, the extension registers provider overrides with `zaiPreserveThinking: true` on all Z.AI providers.
+When enabled, pi-zai sets `clear_thinking: false` via the `before_provider_request` hook. Pi's native providers are not re-registered.
 
 Trade-offs:
 

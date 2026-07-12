@@ -52,7 +52,7 @@ After all retries fail, pi-zai shows an actionable hint via `agent_settled`.
 Check `/zai`:
 
 - `Preserved thinking: enabled` disables cost-first mode
-- Disable via settings or unset `PI_ZAI_PRESERVE_THINKING`
+- Disable via `zai.preserveThinking: false` in settings.json
 
 ## Extension not loading
 

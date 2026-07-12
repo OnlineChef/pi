@@ -58,12 +58,10 @@ export function describeClearThinking(
 }
 
 export function describePreservedThinking(config: ZaiConfig): string {
-	const source =
-		process.env.PI_ZAI_PRESERVE_THINKING !== undefined ? "PI_ZAI_PRESERVE_THINKING" : "settings.json or default";
 	if (config.preserveThinking) {
-		return `enabled via ${source}`;
+		return "enabled via settings.json";
 	}
-	return `disabled (default; source: ${source})`;
+	return "disabled (default; source: settings.json)";
 }
 
 export function describeThinkingPayload(

@@ -28,7 +28,7 @@ export function registerZaiEndpointCommand(pi: ExtensionAPI, deps: ZaiCommandDep
 			if (!target) {
 				ctx.ui.notify(
 					endpoint === "platform"
-						? `Platform model ${modelId} is not registered. Reload extensions or check zai-platform provider setup.`
+						? `Platform model ${modelId} is not in the model registry. Add zai-platform via models.json (see pi-zai docs).`
 						: `Coding Plan model ${modelId} is not available in the model registry.`,
 					"error",
 				);

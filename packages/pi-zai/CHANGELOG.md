@@ -6,9 +6,30 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 ### Breaking Changes
 
+- pi-zai no longer registers or unregisters Pi's native `zai` / `zai-coding-cn` providers
+- `zai-platform` is not auto-registered; add via `models.json` manually
+- Removed `PI_ZAI_*` environment overrides; use `settings.json` only
+
 ### Added
 
+- Local SQLite metrics storage with memory fail-open fallback (`src/storage/`)
+- HMAC project IDs keyed by local `local.secret` (never sent remotely)
+- Request/query correlation and privacy-reduced attempt records
+- `/zai-data` command for storage status, wipe, export, and vacuum
+- Metrics config in `settings.json` (`zai.metrics.mode`, retention, size limits)
+- PR #1 boundary tests: no remote telemetry endpoints or upload paths
+- Native Pi provider boundary (PR #2): thinking normalization via `before_provider_request` only
+- `isNativeZaiModel`, `normalizeZaiThinkingPayload` exports for tests and integrators
+- Benchmark manifest A0-A3 with `/zai-benchmark` (PR #3)
+- `/zai-privacy preview` local allowlist and future aggregate preview (not sent)
+- `/zai-transport` local latency and error-category summary
+- Safe prompt normalization when `zai.promptStability.mode: "safe"` and dynamic marker present
+
 ### Changed
+
+- `X-Session-Id` cache affinity requires `zai.sessionAffinity: "experimental"` (default off)
+- `/zai-data clear-all` also rotates the local project secret
+- `/zai-doctor` treats Platform provider as optional; cache affinity reflects settings
 
 ### Fixed
 

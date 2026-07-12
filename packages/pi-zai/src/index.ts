@@ -13,23 +13,33 @@ import {
 	formatSegmentChangeReason,
 	isZaiModel,
 } from "./cache/index.ts";
+import { applySafePromptNormalization } from "./cache/prompt-safe.ts";
 import { createDefaultZaiCommandDeps, registerZaiCommands } from "./commands/index.ts";
 import { loadZaiConfig, type ZaiConfig } from "./config.ts";
+import { fingerprintPayload, hashSessionId } from "./correlation.ts";
 import { formatPiCredentialSource } from "./credentials.ts";
-import { syncProviderRegistration } from "./platform-provider.ts";
+import { isNativeZaiModel } from "./native-zai.ts";
+import { normalizeZaiThinkingPayload } from "./payload-normalizer.ts";
 import { snapshotPromptStability } from "./prompt-stability.ts";
 import { formatConnectionErrorHint, isConnectionErrorMessage } from "./resilience.ts";
 import {
 	dispatchZaiHook,
+	getAttemptTracker,
 	getCacheMetricsStore,
+	getMetricsStorage,
+	getQueryCorrelation,
 	getTpsTracker,
 	inferEndpoint,
 	isZaiProvider,
 	newSessionAffinityId,
 	resetCacheMetrics,
+	resetCorrelationState,
 	resetTpsMetrics,
 	sessionState,
+	setMetricsStorage,
+	shouldRunDailyMetricsCleanup,
 } from "./state.ts";
+import { createMetricsStorage, projectIdForCwd } from "./storage/index.ts";
 import { clearZaiStatus, updateZaiTpsStatus } from "./telemetry/status.ts";
 
 export { loadZaiConfig, type ZaiConfig } from "./config.ts";
@@ -39,16 +49,13 @@ export {
 	GLM52_THINKING_LEVEL_MAP,
 	PLATFORM_BASE_URL,
 } from "./model-catalog.ts";
-export {
-	applyPreserveThinkingOverrides,
-	clearPreserveThinkingOverrides,
-	registerZaiPlatformProvider,
-	syncProviderRegistration,
-} from "./platform-provider.ts";
+export { isNativeZaiModel } from "./native-zai.ts";
+export { normalizeZaiThinkingPayload } from "./payload-normalizer.ts";
 export {
 	createZaiSessionState,
 	dispatchZaiHook,
 	getCacheMetricsStore,
+	getMetricsStorage,
 	getZaiHookHandlers,
 	inferEndpoint,
 	isZaiProvider,
@@ -107,28 +114,51 @@ function updateCacheSegment(model: Model<any>, systemPrompt: string, tools: { na
 	}
 }
 
-function needsClearThinkingCompatOverride(payload: unknown, config: ZaiConfig): boolean {
-	if (config.preserveThinking) return false;
-	const thinking = (payload as { thinking?: { type?: string; clear_thinking?: boolean } })?.thinking;
-	return thinking?.type === "enabled" && thinking.clear_thinking === false;
+function classifyTransportError(message: string | undefined, httpStatus?: number): string | undefined {
+	if (httpStatus === 429) return "http_429";
+	if (httpStatus !== undefined && httpStatus >= 500) return "http_5xx";
+	if (httpStatus !== undefined && httpStatus >= 400) return "http_4xx";
+	if (!message) return undefined;
+	if (/timeout/i.test(message)) return "timeout_before_headers";
+	if (/certificate|cert/i.test(message)) return "certificate";
+	if (/tls|ssl/i.test(message)) return "tls";
+	if (/proxy/i.test(message)) return "proxy";
+	if (/dns|getaddrinfo|enotfound/i.test(message)) return "dns";
+	if (/connect|refused|reset|hang up|recv failure/i.test(message)) return "tcp_connect";
+	if (/stream|interrupted|terminated/i.test(message)) return "stream_interrupted";
+	if (/context|length|overflow/i.test(message)) return "context_overflow";
+	if (/auth|401|403|unauthorized|forbidden/i.test(message)) return "authentication";
+	if (isConnectionErrorMessage(message)) return "unknown_transport";
+	return undefined;
+}
+
+async function ensureMetricsStorage(config: ZaiConfig, warn: (message: string) => void): Promise<void> {
+	setMetricsStorage(await createMetricsStorage(config.metrics, warn));
 }
 
 export default function piZaiExtension(pi: ExtensionAPI): void {
 	let config: ZaiConfig = loadZaiConfig();
 
 	sessionState.preserveThinking = config.preserveThinking;
-	syncProviderRegistration(pi, config);
 	registerZaiCommands(pi, createDefaultZaiCommandDeps(EXTENSION_VERSION));
 
 	pi.on("session_start", async (event, ctx) => {
-		if (event.reason === "reload") {
-			config = loadZaiConfig(ctx.cwd);
-			sessionState.preserveThinking = config.preserveThinking;
-			syncProviderRegistration(pi, config);
-		} else {
+		config = loadZaiConfig(ctx.cwd);
+		sessionState.preserveThinking = config.preserveThinking;
+		if (event.reason !== "reload") {
 			resetCacheMetrics();
 			resetTpsMetrics();
+			resetCorrelationState();
 			sessionState.sessionAffinityId = newSessionAffinityId();
+		}
+
+		sessionState.projectId = projectIdForCwd(ctx.cwd);
+		sessionState.sessionHash = hashSessionId(ctx.sessionManager.getSessionId());
+		await ensureMetricsStorage(config, (message) => ctx.ui.notify(message, "warning"));
+
+		const storage = getMetricsStorage();
+		if (storage && shouldRunDailyMetricsCleanup()) {
+			storage.runCleanup(Date.now());
 		}
 
 		updateSessionFromModel(ctx.model, pi.getThinkingLevel());
@@ -145,6 +175,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", async (_event, ctx) => {
 		resetCacheMetrics();
 		resetTpsMetrics();
+		setMetricsStorage(undefined);
 		clearZaiStatus(ctx);
 	});
 
@@ -171,6 +202,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 			return;
 		}
 		getTpsTracker().markFirstToken();
+		getAttemptTracker().markFirstDelta();
 	});
 
 	pi.on("message_end", async (event, ctx) => {
@@ -183,15 +215,43 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!ctx.model || !isZaiModel(ctx.model)) return;
+		getQueryCorrelation().beginQuery();
 		const toolNames = pi.getActiveTools().map((name) => ({ name }));
 		updateCacheSegment(ctx.model, event.systemPrompt, toolNames);
 		sessionState.promptStability = snapshotPromptStability(event.systemPrompt);
+
+		if (config.promptStabilityMode === "safe") {
+			const normalized = applySafePromptNormalization(event.systemPrompt);
+			if (normalized !== undefined) {
+				return { systemPrompt: normalized };
+			}
+		}
 	});
 
 	pi.on("turn_end", async (event, ctx) => {
 		sessionState.thinkingLevel = pi.getThinkingLevel();
 		if (ctx.model && isZaiModel(ctx.model) && event.message.role === "assistant" && event.message.usage) {
 			getCacheMetricsStore().record(ctx.model, event.message.usage);
+
+			const assistant = event.message as AssistantMessage;
+			const segment = getCacheMetricsStore().get()?.segment;
+			const record = getAttemptTracker().buildRecord({
+				projectId: sessionState.projectId ?? projectIdForCwd(ctx.cwd),
+				sessionHash: sessionState.sessionHash ?? hashSessionId(ctx.sessionManager.getSessionId()),
+				provider: ctx.model.provider,
+				model: ctx.model.id,
+				endpointKind: sessionState.endpoint,
+				thinkingLevel: sessionState.thinkingLevel,
+				extensionVersion: EXTENSION_VERSION,
+				systemFingerprint: segment?.systemFingerprint,
+				toolsetFingerprint: segment?.toolsetFingerprint,
+				usage: event.message.usage,
+				errorCategory:
+					assistant.stopReason === "error" ? classifyTransportError(assistant.errorMessage, undefined) : undefined,
+			});
+			if (record) {
+				getMetricsStorage()?.recordAttempt(record);
+			}
 		}
 		await dispatchZaiHook("onTurnEnd", event, ctx);
 	});
@@ -224,21 +284,36 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("before_provider_request", async (event) => {
-		if (!needsClearThinkingCompatOverride(event.payload, config)) return;
-		const payload = event.payload as Record<string, unknown>;
-		const thinking = payload.thinking as { type: string; clear_thinking?: boolean };
-		return {
-			...payload,
-			thinking: { ...thinking, clear_thinking: true },
-		};
+	pi.on("before_provider_request", async (event, ctx) => {
+		if (!ctx.model || !isNativeZaiModel(ctx.model)) {
+			return;
+		}
+
+		const { queryId, requestId, attempt } = getQueryCorrelation().nextAttempt();
+		getAttemptTracker().beginAttempt({
+			queryId,
+			requestId,
+			attempt,
+			payloadFingerprint: fingerprintPayload(event.payload),
+		});
+
+		return normalizeZaiThinkingPayload(event.payload, config);
+	});
+
+	pi.on("after_provider_response", async (event, ctx) => {
+		if (!ctx.model || !isNativeZaiModel(ctx.model)) return;
+		getAttemptTracker().markHeadersReceived();
+		getAttemptTracker().markResponse(
+			event.status,
+			event.status >= 400 ? classifyTransportError(undefined, event.status) : undefined,
+		);
 	});
 
 	pi.on("before_provider_headers", async (event) => {
 		if (!isZaiProvider(sessionState.provider)) return;
-		// Z.AI load-balances on X-Session-Id; a stable id pins requests to the
-		// same backend node so the implicit prefix cache stays warm.
-		event.headers["X-Session-Id"] = sessionState.sessionAffinityId;
+		if (config.sessionAffinity === "experimental") {
+			event.headers["X-Session-Id"] = sessionState.sessionAffinityId;
+		}
 		event.headers["User-Agent"] = `pi-zai/${EXTENSION_VERSION}`;
 		event.headers["Accept-Language"] = "en-US,en";
 	});
