@@ -1,0 +1,68 @@
+export {
+	applyZaiCompactionInstructions,
+	applyZaiTreeSummaryInstructions,
+	buildCompactionInstructions,
+	type CompactionHookOptions,
+	compactionDropsHiddenReasoning,
+	compactionPreservesVisibleOutcomes,
+	getCompactionHookOptions,
+	prepareMessagesForCompaction,
+	stripHiddenReasoningFromMessages,
+	ZAI_COMPACTION_SECTIONS,
+} from "./compaction.ts";
+export {
+	analyzeSystemPromptSections,
+	appendDynamicContext,
+	canonicalStableSystemPrefix,
+	DYNAMIC_CONTEXT_MARKER,
+	DYNAMIC_CONTEXT_MARKERS,
+	endpointsShareCache,
+	isCodingPlanProvider,
+	isPlatformProvider,
+	isVolatileSystemPromptLine,
+	isZaiModel,
+	isZaiProvider,
+	type SystemPromptSection,
+	type SystemPromptSectionKind,
+	splitStableAndDynamicSystemPrompt,
+	stripVolatileSystemPromptLines,
+} from "./context-policy.ts";
+export {
+	type CacheDiagnosticAction,
+	type CacheDiagnosticsInput,
+	formatCacheDiagnostics,
+	formatCacheExplain,
+	formatCacheResetMessage,
+	formatCacheStatus,
+} from "./diagnostics.ts";
+export {
+	canonicalizeStablePrefix,
+	canonicalizeTool,
+	fingerprintSystemPrompt,
+	fingerprintText,
+	fingerprintToolset,
+	hashCanonicalText,
+	SHORT_HASH_LENGTH,
+	shortenHash,
+	type ToolFingerprintInput,
+} from "./fingerprint.ts";
+export {
+	buildCacheSegmentKey,
+	CacheMetricsStore,
+	type CacheSegmentKey,
+	type CacheUsageSnapshot,
+	computeCacheRatios,
+	createUsageSnapshot,
+	detectSegmentChange,
+	endpointLabel,
+	estimateCacheSavings,
+	estimateUsageCost,
+	formatSegmentChangeReason,
+	type SegmentChange,
+	type SessionCacheStats,
+} from "./metrics.ts";
+export {
+	buildCacheRecommendations,
+	type CacheRecommendation,
+	formatCacheRecommendations,
+} from "./recommendations.ts";

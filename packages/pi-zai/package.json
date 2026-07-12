@@ -1,0 +1,60 @@
+{
+	"name": "@onlinechefgroep/pi-zai",
+	"version": "0.1.0",
+	"description": "Production-grade Z.AI integration, cache optimizer, and Platform API provider for Pi",
+	"type": "module",
+	"license": "MIT",
+	"author": "Online Chef Groep",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/onlinechefgroep/pi-zai.git"
+	},
+	"keywords": [
+		"pi",
+		"z.ai",
+		"glm",
+		"coding-agent",
+		"cache",
+		"llm"
+	],
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"pi": {
+		"extensions": [
+			"./dist/index.js"
+		]
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"docs",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json",
+		"test": "vitest --run",
+		"prepublishOnly": "npm run clean && npm run build && npm run test"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@earendil-works/pi-agent-core": "0.80.6",
+		"@earendil-works/pi-ai": "0.80.6",
+		"@earendil-works/pi-coding-agent": "0.80.6",
+		"@types/node": "22.19.19",
+		"shx": "0.4.0",
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": ">=0.80.0"
+	}
+}
