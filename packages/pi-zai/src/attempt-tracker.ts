@@ -20,7 +20,6 @@ export class AttemptTracker {
 		return this.inFlight !== undefined;
 	}
 
-	/** Start timing at query begin so delta/header marks work even without before_provider_request. */
 	prepareQueryAttempt(queryId: string, now = Date.now()): void {
 		this.inFlight = {
 			queryId,
@@ -35,7 +34,6 @@ export class AttemptTracker {
 		};
 	}
 
-	/** Attach provider request identity after onPayload / before_provider_request. */
 	armProviderAttempt(input: { requestId: string; attempt: number; payloadFingerprint: string; now?: number }): void {
 		if (!this.inFlight) {
 			this.beginAttempt({

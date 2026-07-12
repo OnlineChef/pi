@@ -21,10 +21,6 @@ function createBenchmarkRunId(): string {
 	return `bench-${Date.now()}-${randomUUID().slice(0, 8)}`;
 }
 
-function resolveProjectId(cwd: string): string {
-	return sessionState.projectId ?? projectIdForCwd(cwd);
-}
-
 function completedRunsForVariant(variant: BenchmarkVariantId): number {
 	const storage = getMetricsStorage();
 	if (!storage) return 0;
@@ -101,7 +97,7 @@ export function registerZaiBenchmarkCommand(pi: ExtensionAPI, deps: ZaiCommandDe
 					}
 
 					const createdAt = Date.now();
-					const projectId = resolveProjectId(ctx.cwd);
+					const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
 					const manifest: BenchmarkRunManifest = {
 						schema: 1,
 						runId: createBenchmarkRunId(),
@@ -152,8 +148,7 @@ export function registerZaiBenchmarkCommand(pi: ExtensionAPI, deps: ZaiCommandDe
 					const projectId = run.manifest.projectId;
 					const filter = { projectId, since: run.manifest.createdAt };
 					const completedAt = Date.now();
-					const totalAttempts = storage.getUsageSummary({ projectId }).attempts;
-					const turnsObserved = Math.max(0, totalAttempts - run.manifest.attemptsBaseline);
+					const projectSummary = storage.getUsageSummary({ projectId });
 					const report = buildBenchmarkRunReport({
 						manifest: run.manifest,
 						completedAt,
@@ -161,7 +156,7 @@ export function registerZaiBenchmarkCommand(pi: ExtensionAPI, deps: ZaiCommandDe
 						transport: storage.getTransportSummary(filter),
 						cache: getCacheMetricsStore().get(),
 						completedRunsForVariant: completedRunsForVariant(run.variant) + 1,
-						turnsObserved,
+						turnsObserved: projectSummary.attempts - run.manifest.attemptsBaseline,
 					});
 					storage.completeBenchmarkRun(runId, report);
 					if (sessionState.activeBenchmarkRunId === runId) {

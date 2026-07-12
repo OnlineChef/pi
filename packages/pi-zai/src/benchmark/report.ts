@@ -15,7 +15,7 @@ export type BenchmarkReportInput = {
 	transport: TransportSummary;
 	cache: SessionCacheStats | undefined;
 	completedRunsForVariant: number;
-	turnsObserved?: number;
+	turnsObserved: number;
 };
 
 export function buildBenchmarkRunReport(input: BenchmarkReportInput): BenchmarkRunReport {
@@ -24,13 +24,12 @@ export function buildBenchmarkRunReport(input: BenchmarkReportInput): BenchmarkR
 		rolling && rolling.input + rolling.cacheRead + rolling.cacheWrite > 0
 			? rolling.cacheRead / (rolling.input + rolling.cacheRead + rolling.cacheWrite)
 			: input.usage.cacheHitRatio;
-	const turnsObserved = input.turnsObserved ?? input.usage.attempts;
 
 	return {
 		schema: 1,
 		completedAt: input.completedAt,
 		durationMs: Math.max(0, input.completedAt - input.manifest.createdAt),
-		turnsObserved,
+		turnsObserved: input.turnsObserved,
 		usage: input.usage,
 		transport: input.transport,
 		cache: {
@@ -41,7 +40,7 @@ export function buildBenchmarkRunReport(input: BenchmarkReportInput): BenchmarkR
 		gates: evaluateRunGates(
 			input.manifest.variant,
 			input.manifest.scenario,
-			turnsObserved,
+			input.turnsObserved,
 			input.completedRunsForVariant,
 		),
 	};
@@ -124,7 +123,6 @@ export function formatBenchmarkGatesSummary(
 	const baselineRuns = completed.filter((run) => run.variant === "A1");
 	if (affinityRuns.length > 0 && baselineRuns.length > 0) {
 		const median = (values: number[]): number => {
-			if (values.length === 0) return 0;
 			const sorted = [...values].sort((left, right) => left - right);
 			return sorted[Math.floor(sorted.length / 2)] ?? 0;
 		};

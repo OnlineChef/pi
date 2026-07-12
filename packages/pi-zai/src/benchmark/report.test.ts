@@ -29,6 +29,7 @@ describe("buildBenchmarkRunReport", () => {
 			transport: { ...EMPTY_TRANSPORT_SUMMARY, attempts: 12 },
 			cache: undefined,
 			completedRunsForVariant: 3,
+			turnsObserved: 12,
 		});
 
 		expect(report.turnsObserved).toBe(12);
@@ -63,6 +64,7 @@ describe("formatBenchmarkGatesSummary", () => {
 					transport: EMPTY_TRANSPORT_SUMMARY,
 					cache: undefined,
 					completedRunsForVariant: 1,
+					turnsObserved: 12,
 				}),
 			},
 		]);

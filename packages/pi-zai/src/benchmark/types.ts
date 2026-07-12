@@ -9,7 +9,6 @@ export type BenchmarkRunManifest = {
 	scenario: BenchmarkScenarioId;
 	extensionVersion: string;
 	projectId: string;
-	/** Attempt count at run start; used to measure turns during the benchmark window. */
 	attemptsBaseline: number;
 	sessionHash?: string;
 	provider?: string;
