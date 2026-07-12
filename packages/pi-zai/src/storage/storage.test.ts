@@ -90,6 +90,21 @@ describe("MemoryStorage", () => {
 			errorCategories: { timeout_before_headers: 1 },
 		});
 	});
+
+	it("filters usage and transport summaries by project and since", () => {
+		const storage = new MemoryStorage();
+		const baseline = Date.now();
+		storage.recordAttempt(record({ occurredAt: baseline - 1_000 }));
+		storage.recordAttempt(record({ occurredAt: baseline + 1_000, inputTokens: 50 }));
+
+		expect(storage.getUsageSummary({ projectId: "project-a", since: baseline })).toMatchObject({
+			attempts: 1,
+			inputTokens: 50,
+		});
+		expect(storage.getTransportSummary({ projectId: "project-a", since: baseline })).toMatchObject({
+			attempts: 1,
+		});
+	});
 });
 
 describe("NodeSqliteStorage", () => {
@@ -124,6 +139,10 @@ describe("NodeSqliteStorage", () => {
 			inputTokens: 100,
 			cacheReadTokens: 900,
 		});
+		expect(storage.getTransportSummary({ projectId: "project-a" })).toMatchObject({
+			attempts: 1,
+			errors: 0,
+		});
 		storage.close();
 	});
 
@@ -132,6 +151,37 @@ describe("NodeSqliteStorage", () => {
 		storage.recordAttempt(record());
 		storage.clearAll();
 		expect(storage.getStatus()).toMatchObject({ detailRows: 0, rollupRows: 0, benchmarkRows: 0 });
+		storage.close();
+	});
+
+	it("records and completes benchmark runs", () => {
+		const storage = sqliteStorage();
+		const manifest = {
+			schema: 1 as const,
+			runId: "bench-1",
+			createdAt: Date.now(),
+			variant: "A1" as const,
+			scenario: "stable-conversation" as const,
+			extensionVersion: "0.1.1",
+			projectId: "project-a",
+			attemptsBaseline: 0,
+			settings: {},
+		};
+		storage.startBenchmarkRun(manifest);
+		expect(storage.getStatus().benchmarkRows).toBe(1);
+
+		const completed = storage.completeBenchmarkRun("bench-1", {
+			schema: 1,
+			completedAt: Date.now(),
+			durationMs: 1000,
+			turnsObserved: 1,
+			usage: storage.getUsageSummary({ projectId: "project-a" }),
+			transport: storage.getTransportSummary({ projectId: "project-a" }),
+			cache: { requestsInSegment: 0, cacheHitRatio: 0, segmentChanges: 0 },
+			gates: [],
+		});
+		expect(completed).toBe(true);
+		expect(storage.getBenchmarkRun("bench-1")?.report?.turnsObserved).toBe(1);
 		storage.close();
 	});
 });

@@ -1,3 +1,4 @@
+import type { BenchmarkRunManifest, BenchmarkRunRecord, BenchmarkRunReport } from "../benchmark/types.ts";
 import {
 	type CleanupResult,
 	EMPTY_TRANSPORT_SUMMARY,
@@ -25,6 +26,7 @@ export class MemoryStorage implements MetricsStorage {
 	private readonly enabled: boolean;
 	private readonly retentionDays: number;
 	private records: ProviderAttemptRecord[] = [];
+	private benchmarkRuns: BenchmarkRunRecord[] = [];
 
 	constructor(options: MemoryStorageOptions = {}) {
 		this.enabled = options.enabled ?? true;
@@ -54,7 +56,7 @@ export class MemoryStorage implements MetricsStorage {
 			kind: this.kind,
 			detailRows: this.enabled ? this.records.length : 0,
 			rollupRows: 0,
-			benchmarkRows: 0,
+			benchmarkRows: this.enabled ? this.benchmarkRuns.length : 0,
 			degraded: false,
 		};
 	}
@@ -81,10 +83,44 @@ export class MemoryStorage implements MetricsStorage {
 		this.records = [];
 	}
 
-	clearBenchmarks(): void {}
+	clearBenchmarks(): void {
+		this.benchmarkRuns = [];
+	}
+
+	startBenchmarkRun(manifest: BenchmarkRunManifest): void {
+		if (!this.enabled) return;
+		this.benchmarkRuns.push({
+			runId: manifest.runId,
+			createdAt: manifest.createdAt,
+			variant: manifest.variant,
+			scenario: manifest.scenario,
+			manifest,
+		});
+	}
+
+	completeBenchmarkRun(runId: string, report: BenchmarkRunReport): boolean {
+		if (!this.enabled) return false;
+		const run = this.benchmarkRuns.find((entry) => entry.runId === runId);
+		if (!run) return false;
+		run.completedAt = report.completedAt;
+		run.report = report;
+		return true;
+	}
+
+	listBenchmarkRuns(): BenchmarkRunRecord[] {
+		return this.enabled ? this.benchmarkRuns.map((entry) => ({ ...entry, manifest: { ...entry.manifest } })) : [];
+	}
+
+	getBenchmarkRun(runId: string): BenchmarkRunRecord | undefined {
+		const run = this.benchmarkRuns.find((entry) => entry.runId === runId);
+		return run
+			? { ...run, manifest: { ...run.manifest }, report: run.report ? { ...run.report } : undefined }
+			: undefined;
+	}
 
 	clearAll(): void {
 		this.records = [];
+		this.benchmarkRuns = [];
 	}
 
 	exportData(format: MetricsExportFormat, filter: UsageFilter = {}): string {

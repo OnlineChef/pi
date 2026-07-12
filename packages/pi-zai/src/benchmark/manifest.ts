@@ -135,6 +135,9 @@ export function formatBenchmarkManifest(): string {
 		`  ${Math.round(BENCHMARK_SAMPLE_GATES.medianGapForAffinity * 100)}pp median cache-hit gap for affinity winner`,
 		"",
 		"Live cache-affinity A/B: npm run benchmark:cache-affinity",
+		"Run tracking: /zai-benchmark start <A1|A2|A3> [scenario]",
+		"              /zai-benchmark complete",
+		"              /zai-benchmark status | report | gates",
 		"Instructions: /zai-benchmark instructions <A0|A1|A2|A3> [scenario]",
 	];
 	return lines.join("\n");

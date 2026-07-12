@@ -51,6 +51,14 @@ describe("PR #3 benchmark and privacy preview", () => {
 		expect(commandsSource).toContain("registerZaiTransportCommand");
 	});
 
+	it("implements benchmark run tracking actions", () => {
+		const benchmarkSource = readSource("commands/benchmark.ts");
+		expect(benchmarkSource).toContain('"start"');
+		expect(benchmarkSource).toContain('"complete"');
+		expect(benchmarkSource).toContain("startBenchmarkRun");
+		expect(benchmarkSource).toContain("completeBenchmarkRun");
+	});
+
 	it("applies safe prompt normalization only in safe mode", () => {
 		const indexSource = readSource("index.ts");
 		expect(indexSource).toContain("applySafePromptNormalization");

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import type { BenchmarkRunManifest, BenchmarkRunRecord, BenchmarkRunReport } from "../benchmark/types.ts";
 import { MemoryStorage } from "./memory.ts";
 import { INITIAL_SCHEMA_SQL, SCHEMA_VERSION } from "./migrations.ts";
 import {
@@ -41,6 +42,34 @@ INSERT INTO provider_attempts (
   ?, ?, ?,
   ?, ?, ?
 )`;
+
+const ROLLUP_ATTEMPTS_OLDER_THAN_SQL = `
+INSERT INTO daily_rollups (
+  day, project_id, provider, model, extension_version,
+  turn_count, attempt_count, error_count,
+  input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+  estimated_api_cost_microusd
+)
+SELECT
+  strftime('%Y-%m-%d', occurred_at / 1000, 'unixepoch'),
+  project_id, provider, model, extension_version,
+  COUNT(*), COUNT(*),
+  SUM(CASE WHEN error_category IS NOT NULL OR http_status >= 400 THEN 1 ELSE 0 END),
+  COALESCE(SUM(input_tokens), 0), COALESCE(SUM(cache_read_tokens), 0),
+  COALESCE(SUM(cache_write_tokens), 0), COALESCE(SUM(output_tokens), 0),
+  COALESCE(SUM(estimated_api_cost_microusd), 0)
+FROM provider_attempts
+WHERE occurred_at < ?
+GROUP BY 1, project_id, provider, model, extension_version
+ON CONFLICT(day, project_id, provider, model, extension_version) DO UPDATE SET
+  turn_count = excluded.turn_count,
+  attempt_count = excluded.attempt_count,
+  error_count = excluded.error_count,
+  input_tokens = excluded.input_tokens,
+  cache_read_tokens = excluded.cache_read_tokens,
+  cache_write_tokens = excluded.cache_write_tokens,
+  output_tokens = excluded.output_tokens,
+  estimated_api_cost_microusd = excluded.estimated_api_cost_microusd`;
 
 export class NodeSqliteStorage implements MetricsStorage {
 	readonly kind = "sqlite" as const;
@@ -191,6 +220,14 @@ SELECT
   AVG(total_ms) AS avg_total_ms
 FROM provider_attempts${detailQuery.where}`)
 				.get(...detailQuery.values) as SqlRow;
+			const rollupQuery = buildRollupWhere(filter);
+			const rollup = this.database
+				.prepare(`
+SELECT
+  COALESCE(SUM(attempt_count), 0) AS attempts,
+  COALESCE(SUM(error_count), 0) AS errors
+FROM daily_rollups${rollupQuery.where}`)
+				.get(...rollupQuery.values) as SqlRow;
 			const categoryQuery = buildErrorCategoryWhere(filter);
 			const categoryRows = this.database
 				.prepare(`
@@ -205,8 +242,8 @@ GROUP BY error_category`)
 				errorCategories[category] = numberValue(categoryRow.count);
 			}
 			return {
-				attempts: numberValue(row.attempts),
-				errors: numberValue(row.errors),
+				attempts: numberValue(row.attempts) + numberValue(rollup.attempts),
+				errors: numberValue(row.errors) + numberValue(rollup.errors),
 				avgRequestToHeadersMs: roundOptionalAverage(row.avg_request_to_headers_ms),
 				avgRequestToFirstDeltaMs: roundOptionalAverage(row.avg_request_to_first_delta_ms),
 				avgTotalMs: roundOptionalAverage(row.avg_total_ms),
@@ -268,35 +305,7 @@ GROUP BY error_category`)
 			let rollupsDeleted = 0;
 			let benchmarksDeleted = 0;
 			try {
-				this.database
-					.prepare(`
-INSERT INTO daily_rollups (
-  day, project_id, provider, model, extension_version,
-  turn_count, attempt_count, error_count,
-  input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
-  estimated_api_cost_microusd
-)
-SELECT
-  strftime('%Y-%m-%d', occurred_at / 1000, 'unixepoch'),
-  project_id, provider, model, extension_version,
-  COUNT(*), COUNT(*),
-  SUM(CASE WHEN error_category IS NOT NULL OR http_status >= 400 THEN 1 ELSE 0 END),
-  COALESCE(SUM(input_tokens), 0), COALESCE(SUM(cache_read_tokens), 0),
-  COALESCE(SUM(cache_write_tokens), 0), COALESCE(SUM(output_tokens), 0),
-  COALESCE(SUM(estimated_api_cost_microusd), 0)
-FROM provider_attempts
-WHERE occurred_at < ?
-GROUP BY 1, project_id, provider, model, extension_version
-ON CONFLICT(day, project_id, provider, model, extension_version) DO UPDATE SET
-  turn_count = excluded.turn_count,
-  attempt_count = excluded.attempt_count,
-  error_count = excluded.error_count,
-  input_tokens = excluded.input_tokens,
-  cache_read_tokens = excluded.cache_read_tokens,
-  cache_write_tokens = excluded.cache_write_tokens,
-  output_tokens = excluded.output_tokens,
-  estimated_api_cost_microusd = excluded.estimated_api_cost_microusd`)
-					.run(detailsCutoff);
+				this.database.prepare(ROLLUP_ATTEMPTS_OLDER_THAN_SQL).run(detailsCutoff);
 				attemptsDeleted = Number(
 					this.database.prepare("DELETE FROM provider_attempts WHERE occurred_at < ?").run(detailsCutoff).changes,
 				);
@@ -344,6 +353,64 @@ ON CONFLICT(day, project_id, provider, model, extension_version) DO UPDATE SET
 	clearBenchmarks(): void {
 		this.executeOrDegrade(() => this.database?.exec("DELETE FROM benchmark_runs;"));
 		this.fallback.clearBenchmarks();
+	}
+
+	startBenchmarkRun(manifest: BenchmarkRunManifest): void {
+		this.fallback.startBenchmarkRun(manifest);
+		if (!this.database) return;
+		try {
+			this.database
+				.prepare(
+					"INSERT INTO benchmark_runs(run_id, created_at, variant, scenario, manifest_json) VALUES (?, ?, ?, ?, ?)",
+				)
+				.run(manifest.runId, manifest.createdAt, manifest.variant, manifest.scenario, JSON.stringify(manifest));
+		} catch (error) {
+			this.degrade(error);
+		}
+	}
+
+	completeBenchmarkRun(runId: string, report: BenchmarkRunReport): boolean {
+		const completed = this.fallback.completeBenchmarkRun(runId, report);
+		if (!this.database) return completed;
+		try {
+			const result = this.database
+				.prepare("UPDATE benchmark_runs SET completed_at = ?, report_json = ? WHERE run_id = ?")
+				.run(report.completedAt, JSON.stringify(report), runId);
+			return completed || Number(result.changes) > 0;
+		} catch (error) {
+			this.degrade(error);
+			return completed;
+		}
+	}
+
+	listBenchmarkRuns(): BenchmarkRunRecord[] {
+		if (!this.database) return this.fallback.listBenchmarkRuns();
+		try {
+			const rows = this.database
+				.prepare(
+					"SELECT run_id, created_at, completed_at, variant, scenario, manifest_json, report_json FROM benchmark_runs ORDER BY created_at DESC",
+				)
+				.all() as SqlRow[];
+			return rows.map(rowToBenchmarkRun);
+		} catch (error) {
+			this.degrade(error);
+			return this.fallback.listBenchmarkRuns();
+		}
+	}
+
+	getBenchmarkRun(runId: string): BenchmarkRunRecord | undefined {
+		if (!this.database) return this.fallback.getBenchmarkRun(runId);
+		try {
+			const row = this.database
+				.prepare(
+					"SELECT run_id, created_at, completed_at, variant, scenario, manifest_json, report_json FROM benchmark_runs WHERE run_id = ?",
+				)
+				.get(runId) as SqlRow | undefined;
+			return row ? rowToBenchmarkRun(row) : undefined;
+		} catch (error) {
+			this.degrade(error);
+			return this.fallback.getBenchmarkRun(runId);
+		}
 	}
 
 	clearAll(): void {
@@ -417,6 +484,7 @@ ORDER BY occurred_at ASC, id ASC`)
 			batch < 20 && databaseFootprint(this.options.databasePath) > this.options.maxDatabaseBytes;
 			batch += 1
 		) {
+			this.database.prepare(ROLLUP_ATTEMPTS_OLDER_THAN_SQL).run(preserveSince);
 			const result = this.database
 				.prepare(
 					"DELETE FROM provider_attempts WHERE id IN (SELECT id FROM provider_attempts WHERE occurred_at < ? ORDER BY occurred_at ASC LIMIT 500)",
@@ -482,6 +550,24 @@ function buildRollupWhere(filter: UsageFilter): { where: string; values: string[
 		values.push(new Date(filter.since).toISOString().slice(0, 10));
 	}
 	return { where: clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "", values };
+}
+
+function rowToBenchmarkRun(row: SqlRow): BenchmarkRunRecord {
+	const manifest = JSON.parse(String(row.manifest_json)) as BenchmarkRunManifest;
+	const reportJson = row.report_json;
+	const report =
+		reportJson === null || reportJson === undefined
+			? undefined
+			: (JSON.parse(String(reportJson)) as BenchmarkRunReport);
+	return {
+		runId: String(row.run_id),
+		createdAt: numberValue(row.created_at),
+		completedAt: optionalNumber(row.completed_at),
+		variant: manifest.variant,
+		scenario: manifest.scenario,
+		manifest,
+		report,
+	};
 }
 
 function rowToRecord(row: SqlRow): ProviderAttemptRecord {

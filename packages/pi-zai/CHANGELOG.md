@@ -24,14 +24,23 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 - `/zai-privacy preview` local allowlist and future aggregate preview (not sent)
 - `/zai-transport` local latency and error-category summary
 - Safe prompt normalization when `zai.promptStability.mode: "safe"` and dynamic marker present
+- Benchmark run tracking: `/zai-benchmark start|complete|status|report|gates` with SQLite `benchmark_runs`
+- Benchmark turns measured from `attemptsBaseline` at run start; gates use per-scenario turn targets
 
 ### Changed
 
 - `X-Session-Id` cache affinity requires `zai.sessionAffinity: "experimental"` (default off)
 - `/zai-data clear-all` also rotates the local project secret
 - `/zai-doctor` treats Platform provider as optional; cache affinity reflects settings
+- Attempt timing starts at `before_agent_start`; transport summary includes rolled-up attempts
+- `/zai-data`, `/zai-transport`, `/zai-privacy` resolve project hash via cwd fallback
 
 ### Fixed
+
+- Missing local attempt records when provider hooks skip `onPayload` (faux/tests)
+- Transport summary ignored daily rollups after cleanup
+- Privacy preview bucket upper-boundary off-by-one
+- SQLite size enforcement now rolls up detail rows before deletion
 
 ### Removed
 

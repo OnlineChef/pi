@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getMetricsStorage, sessionState } from "../state.ts";
+import { projectIdForCwd } from "../storage/project-id.ts";
 import { EMPTY_TRANSPORT_SUMMARY, type TransportSummary } from "../storage/types.ts";
 
 function formatLatency(label: string, value: number | undefined): string | undefined {
@@ -37,7 +38,8 @@ export function registerZaiTransportCommand(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const summary = storage.getTransportSummary({ projectId: sessionState.projectId }) ?? {
+			const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
+			const summary = storage.getTransportSummary({ projectId }) ?? {
 				...EMPTY_TRANSPORT_SUMMARY,
 			};
 			ctx.ui.notify(formatTransportSummary(summary), "info");

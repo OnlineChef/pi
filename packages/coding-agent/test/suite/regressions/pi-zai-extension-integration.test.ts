@@ -314,4 +314,103 @@ describe("pi-zai extension integration", () => {
 		expect(status).toContain("Requests in segment: 1");
 		expect(status).toContain("Uncached (input):");
 	});
+
+	it("records local attempt metrics after a faux Z.AI response", async () => {
+		const notifications: string[] = [];
+		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext((message) => notifications.push(message)),
+			mode: "tui",
+		});
+
+		harness.setResponses([fauxAssistantMessage("ok")]);
+
+		await harness.session.prompt("hello");
+		await harness.session.agent.waitForIdle();
+		notifications.length = 0;
+
+		await harness.session.prompt("/zai-data status");
+
+		const status = notifications.join("\n");
+		expect(status).toContain("Attempts (project): 1");
+	});
+
+	it("records transport timing when faux skips onPayload", async () => {
+		const notifications: string[] = [];
+		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext((message) => notifications.push(message)),
+			mode: "tui",
+		});
+
+		harness.setResponses([fauxAssistantMessage("ok")]);
+		await harness.session.prompt("hello");
+		await harness.session.agent.waitForIdle();
+		notifications.length = 0;
+
+		await harness.session.prompt("/zai-transport");
+		const transport = notifications.join("\n");
+		expect(transport).toContain("Attempts: 1");
+		expect(transport).toMatch(/Avg request to first delta: \d+ ms/);
+	});
+
+	it("uses real before_provider_request when faux factory calls onPayload", async () => {
+		const notifications: string[] = [];
+		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext((message) => notifications.push(message)),
+			mode: "tui",
+		});
+
+		harness.setResponses([
+			async (_context, options, _state, model) => {
+				await options?.onPayload?.({ model: model.id, messages: [] }, model);
+				return fauxAssistantMessage("ok");
+			},
+		]);
+
+		await harness.session.prompt("hello");
+		await harness.session.agent.waitForIdle();
+		notifications.length = 0;
+
+		await harness.session.prompt("/zai-data status");
+		expect(notifications.join("\n")).toContain("Attempts (project): 1");
+	});
+
+	it("tracks benchmark start and complete with local report", async () => {
+		const notifications: string[] = [];
+		const harness = await createPiZaiHarness();
+		harnesses.push(harness);
+
+		await harness.session.bindExtensions({
+			uiContext: createUiContext((message) => notifications.push(message)),
+			mode: "tui",
+		});
+
+		harness.setResponses([fauxAssistantMessage("ok")]);
+		await harness.session.prompt("hello");
+		await harness.session.agent.waitForIdle();
+		notifications.length = 0;
+
+		await harness.session.prompt("/zai-benchmark start A1 stable-conversation");
+		const started = notifications.join("\n");
+		expect(started).toContain("Started benchmark");
+		notifications.length = 0;
+
+		harness.setResponses([fauxAssistantMessage("benchmark turn")]);
+		await harness.session.prompt("turn during benchmark");
+		await harness.session.agent.waitForIdle();
+		notifications.length = 0;
+
+		await harness.session.prompt("/zai-benchmark complete");
+		const completed = notifications.join("\n");
+		expect(completed).toContain("Benchmark report: A1 / stable-conversation");
+		expect(completed).toContain("Turns observed: 1");
+	});
 });

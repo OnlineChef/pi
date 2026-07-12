@@ -24,7 +24,7 @@ export function registerZaiCommands(pi: ExtensionAPI, deps: ZaiCommandDeps): voi
 	registerZaiDoctorCommand(pi, deps);
 	registerZaiPrivacyCommand(pi, deps);
 	registerZaiTransportCommand(pi);
-	registerZaiBenchmarkCommand(pi);
+	registerZaiBenchmarkCommand(pi, deps);
 }
 
 export function createDefaultZaiCommandDeps(extensionVersion: string): ZaiCommandDeps {

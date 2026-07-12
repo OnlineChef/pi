@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { formatPrivacyPreview } from "../privacy-preview.ts";
 import { getMetricsStorage, sessionState } from "../state.ts";
+import { projectIdForCwd } from "../storage/project-id.ts";
 import { EMPTY_USAGE_SUMMARY } from "../storage/types.ts";
 import type { ZaiCommandDeps } from "./deps.ts";
 
@@ -22,7 +23,8 @@ export function registerZaiPrivacyCommand(pi: ExtensionAPI, deps: ZaiCommandDeps
 
 			const config = deps.getConfig(ctx.cwd);
 			const storage = getMetricsStorage();
-			const usage = storage?.getUsageSummary({ projectId: sessionState.projectId }) ?? { ...EMPTY_USAGE_SUMMARY };
+			const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
+			const usage = storage?.getUsageSummary({ projectId }) ?? { ...EMPTY_USAGE_SUMMARY };
 			ctx.ui.notify(formatPrivacyPreview(config, sessionState, usage), "info");
 		},
 	});

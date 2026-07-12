@@ -5,6 +5,10 @@ import { getMetricsStorage, sessionState } from "../state.ts";
 import { clearLocalProjectSecret, projectIdForCwd } from "../storage/project-id.ts";
 import type { ZaiCommandDeps } from "./deps.ts";
 
+function resolveProjectId(cwd: string): string {
+	return sessionState.projectId ?? projectIdForCwd(cwd);
+}
+
 const ACTIONS = [
 	"status",
 	"clear-project",
@@ -23,14 +27,15 @@ function formatBytes(bytes: number | undefined): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatStatus(): string {
+function formatStatus(cwd: string): string {
 	const storage = getMetricsStorage();
 	if (!storage) {
 		return "Local metrics storage is not initialized.";
 	}
 
+	const projectId = resolveProjectId(cwd);
 	const status = storage.getStatus();
-	const summary = storage.getUsageSummary({ projectId: sessionState.projectId });
+	const summary = storage.getUsageSummary({ projectId });
 	const lines = [
 		"Z.AI local metrics",
 		`  Storage: ${status.kind}${status.degraded ? " (degraded)" : ""}`,
@@ -39,7 +44,7 @@ function formatStatus(): string {
 		`  Detail rows: ${status.detailRows}`,
 		`  Rollup rows: ${status.rollupRows}`,
 		`  Benchmark rows: ${status.benchmarkRows}`,
-		`  Project hash: ${sessionState.projectId ?? "unknown"}`,
+		`  Project hash: ${projectId}`,
 		`  Session hash: ${sessionState.sessionHash ?? "unknown"}`,
 		`  Attempts (project): ${summary.attempts}`,
 		`  Cache hit ratio (project): ${summary.cacheHitRatio > 0 ? `${(summary.cacheHitRatio * 100).toFixed(1)}%` : "n/a"}`,
@@ -66,10 +71,10 @@ export function registerZaiDataCommand(pi: ExtensionAPI, _deps: ZaiCommandDeps):
 
 			switch (normalized) {
 				case "status":
-					ctx.ui.notify(formatStatus(), "info");
+					ctx.ui.notify(formatStatus(ctx.cwd), "info");
 					return;
 				case "clear-project": {
-					const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
+					const projectId = resolveProjectId(ctx.cwd);
 					storage.clearProject(projectId);
 					ctx.ui.notify(`Cleared local metrics for project ${projectId}.`, "info");
 					return;
@@ -96,7 +101,7 @@ export function registerZaiDataCommand(pi: ExtensionAPI, _deps: ZaiCommandDeps):
 						return;
 					}
 					const format = normalized === "export-json" ? "json" : "csv";
-					const projectId = sessionState.projectId ?? projectIdForCwd(ctx.cwd);
+					const projectId = resolveProjectId(ctx.cwd);
 					const payload = storage.exportData(format, { projectId });
 					const target = resolve(ctx.cwd, pathArg);
 					writeFileSync(target, payload, "utf-8");

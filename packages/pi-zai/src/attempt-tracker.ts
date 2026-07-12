@@ -16,6 +16,43 @@ type InFlightAttempt = {
 export class AttemptTracker {
 	private inFlight: InFlightAttempt | undefined;
 
+	hasInFlight(): boolean {
+		return this.inFlight !== undefined;
+	}
+
+	/** Start timing at query begin so delta/header marks work even without before_provider_request. */
+	prepareQueryAttempt(queryId: string, now = Date.now()): void {
+		this.inFlight = {
+			queryId,
+			requestId: `${queryId}-pending`,
+			attempt: 0,
+			payloadFingerprint: "pending",
+			requestStartedAt: now,
+			headersReceivedAt: undefined,
+			firstDeltaAt: undefined,
+			httpStatus: undefined,
+			errorCategory: undefined,
+		};
+	}
+
+	/** Attach provider request identity after onPayload / before_provider_request. */
+	armProviderAttempt(input: { requestId: string; attempt: number; payloadFingerprint: string; now?: number }): void {
+		if (!this.inFlight) {
+			this.beginAttempt({
+				queryId: input.requestId.replace(/-a\d+$/, ""),
+				requestId: input.requestId,
+				attempt: input.attempt,
+				payloadFingerprint: input.payloadFingerprint,
+				now: input.now,
+			});
+			return;
+		}
+		this.inFlight.requestId = input.requestId;
+		this.inFlight.attempt = input.attempt;
+		this.inFlight.payloadFingerprint = input.payloadFingerprint;
+		this.inFlight.requestStartedAt = input.now ?? Date.now();
+	}
+
 	beginAttempt(input: {
 		queryId: string;
 		requestId: string;

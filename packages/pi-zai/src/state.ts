@@ -25,6 +25,7 @@ export interface ZaiSessionState {
 	 * prefix cache warm, raising cache hit rates.
 	 */
 	sessionAffinityId: string;
+	activeBenchmarkRunId: string | undefined;
 	promptStability:
 		| {
 				stableLineCount: number;
@@ -76,6 +77,7 @@ export function createZaiSessionState(preserveThinking = false): ZaiSessionState
 		sessionHash: undefined,
 		projectId: undefined,
 		sessionAffinityId: newSessionAffinityId(),
+		activeBenchmarkRunId: undefined,
 		promptStability: undefined,
 	};
 }

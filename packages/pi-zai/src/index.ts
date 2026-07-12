@@ -132,6 +132,17 @@ function classifyTransportError(message: string | undefined, httpStatus?: number
 	return undefined;
 }
 
+function ensureAttemptTrackingForTurnEnd(): void {
+	if (getAttemptTracker().hasInFlight()) return;
+	const { queryId, requestId, attempt } = getQueryCorrelation().nextAttempt();
+	getAttemptTracker().beginAttempt({
+		queryId,
+		requestId,
+		attempt,
+		payloadFingerprint: "no-before-provider-request",
+	});
+}
+
 async function ensureMetricsStorage(config: ZaiConfig, warn: (message: string) => void): Promise<void> {
 	setMetricsStorage(await createMetricsStorage(config.metrics, warn));
 }
@@ -150,6 +161,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 			resetTpsMetrics();
 			resetCorrelationState();
 			sessionState.sessionAffinityId = newSessionAffinityId();
+			sessionState.activeBenchmarkRunId = undefined;
 		}
 
 		sessionState.projectId = projectIdForCwd(ctx.cwd);
@@ -175,6 +187,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", async (_event, ctx) => {
 		resetCacheMetrics();
 		resetTpsMetrics();
+		sessionState.activeBenchmarkRunId = undefined;
 		setMetricsStorage(undefined);
 		clearZaiStatus(ctx);
 	});
@@ -215,16 +228,21 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!ctx.model || !isZaiModel(ctx.model)) return;
-		getQueryCorrelation().beginQuery();
+		const queryId = getQueryCorrelation().beginQuery();
+		getAttemptTracker().prepareQueryAttempt(queryId);
 		const toolNames = pi.getActiveTools().map((name) => ({ name }));
-		updateCacheSegment(ctx.model, event.systemPrompt, toolNames);
-		sessionState.promptStability = snapshotPromptStability(event.systemPrompt);
-
+		let systemPromptForMetrics = event.systemPrompt;
 		if (config.promptStabilityMode === "safe") {
 			const normalized = applySafePromptNormalization(event.systemPrompt);
 			if (normalized !== undefined) {
-				return { systemPrompt: normalized };
+				systemPromptForMetrics = normalized;
 			}
+		}
+		updateCacheSegment(ctx.model, systemPromptForMetrics, toolNames);
+		sessionState.promptStability = snapshotPromptStability(systemPromptForMetrics);
+
+		if (config.promptStabilityMode === "safe" && systemPromptForMetrics !== event.systemPrompt) {
+			return { systemPrompt: systemPromptForMetrics };
 		}
 	});
 
@@ -235,6 +253,7 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 
 			const assistant = event.message as AssistantMessage;
 			const segment = getCacheMetricsStore().get()?.segment;
+			ensureAttemptTrackingForTurnEnd();
 			const record = getAttemptTracker().buildRecord({
 				projectId: sessionState.projectId ?? projectIdForCwd(ctx.cwd),
 				sessionHash: sessionState.sessionHash ?? hashSessionId(ctx.sessionManager.getSessionId()),
@@ -290,12 +309,20 @@ export default function piZaiExtension(pi: ExtensionAPI): void {
 		}
 
 		const { queryId, requestId, attempt } = getQueryCorrelation().nextAttempt();
-		getAttemptTracker().beginAttempt({
-			queryId,
-			requestId,
-			attempt,
-			payloadFingerprint: fingerprintPayload(event.payload),
-		});
+		if (attempt > 1 || !getAttemptTracker().hasInFlight()) {
+			getAttemptTracker().beginAttempt({
+				queryId,
+				requestId,
+				attempt,
+				payloadFingerprint: fingerprintPayload(event.payload),
+			});
+		} else {
+			getAttemptTracker().armProviderAttempt({
+				requestId,
+				attempt,
+				payloadFingerprint: fingerprintPayload(event.payload),
+			});
+		}
 
 		return normalizeZaiThinkingPayload(event.payload, config);
 	});

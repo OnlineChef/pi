@@ -40,4 +40,16 @@ describe("privacy preview", () => {
 		expect(text).toContain("mode: off");
 		expect(text).not.toContain("fetch(");
 	});
+
+	it("buckets exact upper boundaries inclusively", () => {
+		const config = loadZaiConfig("/tmp");
+		const preview = buildAggregateTelemetryPreview(
+			config,
+			{ provider: "zai", modelId: "glm-5.2", endpoint: "coding", promptStability: undefined },
+			{ ...EMPTY_USAGE_SUMMARY, attempts: 100, errors: 10, cacheHitRatio: 1 },
+		);
+		expect(preview.cacheRatioBucket).toBe("90-100");
+		expect(preview.turnBucket).toBe("50-100");
+		expect(preview.retryRateBucket).toBe("5-10");
+	});
 });
