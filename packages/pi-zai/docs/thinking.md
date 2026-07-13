@@ -4,15 +4,22 @@ Thinking is controlled **natively by Pi**. This extension does not add thinking 
 
 ## GLM-5.2 levels
 
-Pi exposes exactly three levels for GLM-5.2:
+Pi exposes three effective levels for GLM-5.2:
 
 ```text
 off
 high
-max
+xhigh
 ```
 
-Other Pi levels (`minimal`, `low`, `medium`, `xhigh`) are hidden via `thinkingLevelMap`.
+`xhigh` maps to Z.AI `reasoning_effort: "max"` (the strongest Z.AI effort). Other Pi
+levels (`minimal`, `low`, `medium`) are hidden via `thinkingLevelMap` and clamp up
+to `high`.
+
+> Note: Z.AI exposes three efforts natively — `high`, `max`, and disabled. The Pi
+> `max` slot exists in the map for documentation but is not selectable from the
+> Pi TUI because Pi's `EXTENDED_THINKING_LEVELS` stops at `xhigh`; select `xhigh`
+> to get the strongest Z.AI reasoning.
 
 Control thinking through:
 
@@ -28,8 +35,9 @@ Upstream Pi maps levels to Z.AI request fields:
 | Pi level | Z.AI request |
 |----------|----------------|
 | `off` | `thinking: { type: "disabled", clear_thinking: true }` |
+| `minimal`/`low`/`medium` | clamp up to `high`: `reasoning_effort: "high"` |
 | `high` | `thinking: { type: "enabled", clear_thinking: true }`, `reasoning_effort: "high"` |
-| `max` | `thinking: { type: "enabled", clear_thinking: true }`, `reasoning_effort: "max"` |
+| `xhigh` | `thinking: { type: "enabled", clear_thinking: true }`, `reasoning_effort: "max"` |
 
 `/zai` shows the current native level read-only:
 

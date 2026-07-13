@@ -12,6 +12,8 @@ All notable changes to `@onlinechefgroep/pi-zai` are documented in this file.
 
 ### Fixed
 
+- GLM-5.2 `thinkingLevelMap`: `xhigh` now maps to Z.AI `reasoning_effort: "max"` instead of forwarding the raw Pi level string. Previously `xhigh` was `null` in the map but Pi-core still treated it as selectable (its `null !== undefined` special case), so selecting `xhigh` sent an undocumented `reasoning_effort="xhigh"` to Z.AI. The strongest Z.AI effort is now reachable via the highest Pi level. Doctor check and `docs/thinking.md` updated to match.
+
 ### Removed
 
 ## [0.3.0] - 2026-07-12
