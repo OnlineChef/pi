@@ -6,6 +6,8 @@
  * surfaces the 5-hour / weekly token windows and monthly MCP tool budget.
  */
 
+import { zaiFetch } from "./zai-fetch.ts";
+
 export type QuotaLimitType = "TOKENS_LIMIT" | "TIME_LIMIT";
 
 export interface QuotaUsageDetail {
@@ -95,7 +97,7 @@ async function fetchQuotaOnce(
 	headers: Record<string, string>,
 	timeoutMs: number,
 ): Promise<QuotaFetchResult> {
-	const response = await fetch(url, {
+	const response = await zaiFetch(url, {
 		method: "GET",
 		headers,
 		signal: AbortSignal.timeout(timeoutMs),

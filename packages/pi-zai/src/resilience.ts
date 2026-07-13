@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { inferEndpoint, type ZaiEndpointKind } from "./state.ts";
+import { zaiFetch } from "./zai-fetch.ts";
 
 const CONNECTION_ERROR_PATTERN =
 	/connection.?error|connection.?refused|connection.?lost|fetch failed|network.?error|recv failure|reset before headers|socket hang up|timed? out|timeout|terminated|upstream.?connect/i;
@@ -102,10 +103,15 @@ export function formatConnectionErrorHint(model: Model<any>): string {
 	return lines.join("\n");
 }
 
+/** Any HTTP response means the transport reached api.z.ai (401 = no/invalid auth, not a drop). */
+export function isProbeTransportSuccess(httpStatus: number): boolean {
+	return httpStatus >= 100 && httpStatus < 600;
+}
+
 export async function probeChatEndpoint(
 	baseUrl: string,
 	apiKey: string,
-	attempts = 3,
+	attempts = 5,
 ): Promise<Omit<EndpointProbeResult, "endpoint">> {
 	let ok = 0;
 	let fail = 0;
@@ -121,7 +127,7 @@ export async function probeChatEndpoint(
 	for (let i = 0; i < attempts; i += 1) {
 		const started = Date.now();
 		try {
-			const response = await fetch(`${baseUrl}/chat/completions`, {
+			const response = await zaiFetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
 				headers: {
 					Authorization: `Bearer ${apiKey}`,
@@ -131,14 +137,14 @@ export async function probeChatEndpoint(
 				signal: AbortSignal.timeout(20_000),
 			});
 			latencyMs.push(Date.now() - started);
-			if (response.ok) ok += 1;
+			if (isProbeTransportSuccess(response.status)) ok += 1;
 			else fail += 1;
 		} catch {
 			latencyMs.push(Date.now() - started);
 			fail += 1;
 		}
 		if (i + 1 < attempts) {
-			await new Promise((resolve) => setTimeout(resolve, 750));
+			await new Promise((resolve) => setTimeout(resolve, 500));
 		}
 	}
 
@@ -152,4 +158,19 @@ export function formatProbeSummary(result: EndpointProbeResult): string {
 			? Math.round(result.latencyMs.reduce((sum, value) => sum + value, 0) / result.latencyMs.length)
 			: 0;
 	return `${result.ok}/${total} ok, avg ${avg}ms`;
+}
+
+/**
+ * Classification policy for a chat-endpoint probe, kept pure so the threshold
+ * contract is unit-testable without mocking the network.
+ *
+ * The policy is deliberately strict — pass only when every attempt succeeded —
+ * because a probe that already shows drops is the earliest honest signal that
+ * real traffic will too. We do not tolerate "one transient drop"; if the line
+ * is flaky the doctor should say so instead of painting it green.
+ */
+export function classifyProbeOutcome(probe: Pick<EndpointProbeResult, "ok" | "fail">): "pass" | "warn" | "fail" {
+	if (probe.fail === 0 && probe.ok > 0) return "pass";
+	if (probe.ok > 0) return "warn";
+	return "fail";
 }

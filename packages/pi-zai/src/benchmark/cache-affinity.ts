@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { zaiFetch } from "../zai-fetch.ts";
 
 export type SessionHeaderMode = "stable" | "none" | "rotating";
 
@@ -199,7 +200,7 @@ export async function runSingleTurn(
 			if (sessionHeader) {
 				headers["X-Session-Id"] = sessionHeader;
 			}
-			const response = await fetch(url, {
+			const response = await zaiFetch(url, {
 				method: "POST",
 				headers,
 				body: JSON.stringify({

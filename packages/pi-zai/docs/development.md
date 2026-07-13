@@ -15,7 +15,9 @@ packages/pi-zai/
 ```
 
 Monorepo path: `earendil-works/pi-mono` → `packages/pi-zai`.  
-Standalone mirror: [OnlineChefGroep/pi-zai](https://github.com/OnlineChefGroep/pi-zai).
+Standalone mirror (source of truth for releases): [OnlineChefGroep/pi-zai](https://github.com/OnlineChefGroep/pi-zai).
+
+The monorepo copy is kept for Pi integration tests (`packages/coding-agent/test/suite/regressions/`). Ship user-facing changes to the standalone repo; do not rely on pushing the monorepo fork for releases.
 
 ## Requirements
 

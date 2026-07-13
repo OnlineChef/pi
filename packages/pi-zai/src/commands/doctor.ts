@@ -5,6 +5,7 @@ import { buildCompactionInstructions, ZAI_COMPACTION_SECTIONS } from "../cache/c
 import { canonicalStableSystemPrefix } from "../cache/context-policy.ts";
 import { fingerprintToolset } from "../cache/fingerprint.ts";
 import {
+	classifyProbeOutcome,
 	formatProbeSummary,
 	formatRecommendedRetrySettingsJson,
 	formatRetrySettingsAdvice,
@@ -12,6 +13,7 @@ import {
 	readPiRetrySettings,
 } from "../resilience.ts";
 import { inferEndpoint, sessionState } from "../state.ts";
+import { zaiFetch } from "../zai-fetch.ts";
 import type { ZaiCommandDeps } from "./deps.ts";
 import { describeThinkingPayload, formatCredentialSource, getZaiCompat, requireZaiModel } from "./helpers.ts";
 
@@ -43,20 +45,29 @@ function isReasoningEffortModel(model: Model<any> | undefined): boolean {
 	return (model?.compat as { supportsReasoningEffort?: boolean } | undefined)?.supportsReasoningEffort === true;
 }
 
-function glm52ThinkingMapOk(model: Model<any> | undefined): boolean {
+/**
+ * Validate the GLM-5.2 thinkingLevelMap against its functional contract:
+ *  - `high` and `max` must be exposed (the two Z.AI reasoning_effort values we use)
+ *  - `minimal`/`low`/`medium` must be hidden (null) — they clamp up to `high`
+ *  - `xhigh` is optional: built-in `zai/glm-5.2` hides it (null), the optional
+ *    `zai-platform` catalog maps it to `"max"`. Both shapes are valid, so the
+ *    doctor must accept either instead of hard-coding a single expectation.
+ */
+export function glm52ThinkingMapOk(model: Model<any> | undefined): boolean {
 	if (!model?.thinkingLevelMap) return false;
 	const map = model.thinkingLevelMap;
+	const xhighOk = map.xhigh === null || map.xhigh === "high" || map.xhigh === "max";
 	return (
 		map.minimal === null &&
 		map.low === null &&
 		map.medium === null &&
 		map.high === "high" &&
-		map.xhigh === "max" &&
+		xhighOk &&
 		map.max === "max"
 	);
 }
 
-function hasPlatformPricing(model: Model<any> | undefined): boolean {
+export function hasPlatformPricing(model: Model<any> | undefined): boolean {
 	if (!model) return false;
 	const { input, output } = model.cost;
 	return input > 0 || output > 0;
@@ -72,22 +83,39 @@ async function runNetworkProbe(ctx: ExtensionCommandContext, model: Model<any>):
 		};
 	}
 
+	// Z.AI's coding PAAS v4 endpoint does not expose an OpenAI-style GET /models
+	// route (the server resets the connection → "fetch failed"). Probe the real
+	// /chat/completions endpoint with a minimal non-streaming request so the
+	// reachability check reflects actual model traffic.
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 10_000);
+	const timeout = setTimeout(() => controller.abort(), 20_000);
 	try {
-		const response = await fetch(`${model.baseUrl}/models`, {
-			method: "GET",
+		const body = JSON.stringify({
+			model: model.id,
+			messages: [{ role: "user", content: "ok" }],
+			max_tokens: 1,
+			stream: false,
+			thinking: { type: "disabled", clear_thinking: true },
+		});
+		const response = await zaiFetch(`${model.baseUrl}/chat/completions`, {
+			method: "POST",
 			headers: {
-				...auth.headers,
 				Authorization: auth.headers?.Authorization ?? `Bearer ${auth.apiKey}`,
+				"Content-Type": "application/json",
+				...auth.headers,
 			},
+			body,
 			signal: controller.signal,
 		});
-		if (response.ok) {
+		if (response.ok || response.status === 401 || response.status === 403) {
+			const authNote =
+				response.status === 401 || response.status === 403
+					? " (transport ok; check credentials if requests fail in chat)"
+					: "";
 			return {
 				name: "Network probe",
 				status: "pass",
-				detail: `Reachable (${response.status}) at ${model.baseUrl}/models`,
+				detail: `Reachable (${response.status}) at ${model.baseUrl}/chat/completions${authNote}`,
 			};
 		}
 		return {
@@ -117,23 +145,34 @@ async function runConnectionStabilityProbe(ctx: ExtensionCommandContext, model: 
 		};
 	}
 
-	const probe = await probeChatEndpoint(model.baseUrl, auth.apiKey, 3);
+	// Five attempts give a statistically meaningful success ratio for detecting
+	// intermittent drops (1 fail in 3 is noisy; 1 fail in 5 is a clearer signal).
+	const probe = await probeChatEndpoint(model.baseUrl, auth.apiKey, 5);
 	const summary = formatProbeSummary({
 		endpoint: inferEndpoint(model.provider, model.baseUrl),
 		...probe,
 	});
-	if (probe.fail === 0) {
+	const outcome = classifyProbeOutcome(probe);
+	if (outcome === "pass") {
 		return {
 			name: "Connection stability",
 			status: "pass",
 			detail: `${summary} at ${model.baseUrl}`,
 		};
 	}
-	if (probe.ok > 0) {
+	if (outcome === "warn") {
+		// Tailor the advice to what the user can still change. If Pi retries are
+		// already strong, telling them to raise retry.provider.maxRetries is
+		// noise — point them at the endpoint switch and host-side checks instead.
+		const retry = readPiRetrySettings();
+		const retryAlreadyStrong = retry.enabled && retry.agentMaxRetries >= 5 && retry.providerMaxRetries >= 2;
+		const hint = retryAlreadyStrong
+			? "Retries already strong; try /zai-endpoint or check VPN/proxy/firewall to api.z.ai"
+			: "Try /zai-endpoint or Pi retry.provider.maxRetries=2";
 		return {
 			name: "Connection stability",
 			status: "warn",
-			detail: `${summary} at ${model.baseUrl}; intermittent drops likely (Connection error). Try /zai-endpoint or Pi retry.provider.maxRetries=2`,
+			detail: `${summary} at ${model.baseUrl}; intermittent drops likely (Connection error). ${hint}`,
 		};
 	}
 	return {
@@ -194,11 +233,24 @@ export function registerZaiDoctorCommand(pi: ExtensionAPI, deps: ZaiCommandDeps)
 
 			const thinkingModel = active ?? codingModel;
 			if (isReasoningEffortModel(thinkingModel)) {
+				const mapOk = glm52ThinkingMapOk(thinkingModel);
+				// Both shapes are functionally equivalent: with xhigh=null pi's
+				// clampThinkingLevel() still routes xhigh → max, so users always get
+				// max reasoning. The only difference is whether xhigh appears in the
+				// thinking selector. Report which shape is active so the detail line
+				// is honest rather than a generic "ok".
+				const xhighMapped = thinkingModel?.thinkingLevelMap?.xhigh;
+				const shape =
+					xhighMapped === null
+						? "built-in shape (xhigh hidden, clamps to max)"
+						: xhighMapped === "max"
+							? "platform shape (xhigh → max)"
+							: "custom shape";
 				checks.push({
 					name: "GLM-5.2 thinkingLevelMap",
-					status: glm52ThinkingMapOk(thinkingModel) ? "pass" : "warn",
-					detail: glm52ThinkingMapOk(thinkingModel)
-						? "off/high/xhigh exposed; xhigh maps to Z.AI `max`; minimal/low/medium hidden (clamp to high)"
+					status: mapOk ? "pass" : "warn",
+					detail: mapOk
+						? `off/high/max exposed; minimal/low/medium hidden (clamp to high); ${shape}`
 						: "Unexpected thinkingLevelMap on active or default model",
 				});
 			} else {
@@ -248,12 +300,15 @@ export function registerZaiDoctorCommand(pi: ExtensionAPI, deps: ZaiCommandDeps)
 				detail: "Handled by upstream pi-ai openai-completions Z.AI parser (cacheRead from cached_tokens).",
 			});
 
+			const platformRegistered = deps.isPlatformProviderRegistered(ctx) && platformModel !== undefined;
 			checks.push({
 				name: "Platform pricing metadata",
-				status: hasPlatformPricing(platformModel) ? "pass" : "warn",
-				detail: hasPlatformPricing(platformModel)
-					? "Platform glm-5.2 has non-zero pricing metadata"
-					: "Platform glm-5.2 pricing metadata missing or zero",
+				status: !platformRegistered ? "skip" : hasPlatformPricing(platformModel) ? "pass" : "warn",
+				detail: !platformRegistered
+					? "Platform provider not registered; pricing n/a"
+					: hasPlatformPricing(platformModel)
+						? "Platform glm-5.2 has non-zero pricing metadata"
+						: "Platform glm-5.2 pricing metadata missing or zero",
 			});
 
 			const stableSample = canonicalStableSystemPrefix("Project rules\nCurrent git status: dirty");

@@ -2,6 +2,14 @@ export interface Env {
 	PI_ZAI_TELEMETRY?: AnalyticsEngineDataset;
 }
 
+type ProviderModelRow = {
+	provider: string;
+	model: string;
+	endpointKind: string;
+	attempts: number;
+	errors: number;
+};
+
 type AggregateBody = {
 	schema: number;
 	day: string;
@@ -9,39 +17,56 @@ type AggregateBody = {
 	promptMode: string;
 	attempts: number;
 	errors: number;
+	inputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	outputTokens: number;
+	turnBucket: string;
+	cacheRatioBucket: string;
+	retryRateBucket: string;
+	byProviderModel: ProviderModelRow[];
+	errorCategories: Record<string, number>;
 };
 
-const FORBIDDEN = [
-	"project",
-	"session",
+const FORBIDDEN_KEY_NAMES = [
+	"projectid",
+	"project_id",
+	"sessionhash",
+	"session_hash",
+	"sessionid",
+	"session_id",
+	"queryid",
+	"query_id",
+	"requestid",
+	"request_id",
 	"fingerprint",
-	"prompt",
-	"path",
 	"cwd",
 	"hostname",
-	"install",
+	"installid",
+	"install_id",
 	"apikey",
+	"api_key",
 	"secret",
-	"query",
-	"request",
-];
+] as const;
 
-function containsForbiddenKey(value: unknown, path = ""): string | undefined {
-	if (value === null || typeof value !== "object") return undefined;
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			const hit = containsForbiddenKey(entry, path);
-			if (hit) return hit;
-		}
-		return undefined;
+function normalizeKey(key: string): string {
+	return key.toLowerCase().replace(/_/g, "");
+}
+
+function isForbiddenKeyName(key: string): boolean {
+	const normalized = normalizeKey(key);
+	return FORBIDDEN_KEY_NAMES.some((token) => normalized.includes(token.replace(/_/g, "")));
+}
+
+function validateProviderRow(row: unknown, index: number): string | undefined {
+	if (!row || typeof row !== "object") return `byProviderModel[${index}] must be an object`;
+	const record = row as Record<string, unknown>;
+	for (const key of Object.keys(record)) {
+		if (isForbiddenKeyName(key)) return `forbidden field: byProviderModel[${index}].${key}`;
 	}
-	for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-		const full = `${path}.${key}`.toLowerCase();
-		for (const token of FORBIDDEN) {
-			if (full.includes(token)) return full;
-		}
-		const hit = containsForbiddenKey(nested, full);
-		if (hit) return hit;
+	const allowed = new Set(["provider", "model", "endpointKind", "attempts", "errors"]);
+	for (const key of Object.keys(record)) {
+		if (!allowed.has(key)) return `unknown field: byProviderModel[${index}].${key}`;
 	}
 	return undefined;
 }
@@ -50,7 +75,26 @@ function validateBody(body: AggregateBody): string | undefined {
 	if (body.schema !== 1) return "schema must be 1";
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(body.day)) return "invalid day";
 	if (body.attempts < 0 || body.errors < 0) return "negative counts";
-	return containsForbiddenKey(body);
+	if (!Array.isArray(body.byProviderModel)) return "byProviderModel must be an array";
+	if (!body.errorCategories || typeof body.errorCategories !== "object") return "errorCategories must be an object";
+
+	for (const key of Object.keys(body.errorCategories)) {
+		if (isForbiddenKeyName(key)) return `forbidden field: errorCategories.${key}`;
+	}
+
+	for (let index = 0; index < body.byProviderModel.length; index += 1) {
+		const rowError = validateProviderRow(body.byProviderModel[index], index);
+		if (rowError) return rowError;
+	}
+
+	const serialized = JSON.stringify(body).toLowerCase();
+	for (const token of FORBIDDEN_KEY_NAMES) {
+		if (serialized.includes(`"${token}"`) || serialized.includes(`"${token.replace(/_/g, "")}"`)) {
+			return `forbidden field: ${token}`;
+		}
+	}
+
+	return undefined;
 }
 
 export default {
@@ -76,8 +120,15 @@ export default {
 		}
 
 		env.PI_ZAI_TELEMETRY?.writeDataPoint({
-			blobs: [body.day, body.extensionVersion, body.promptMode],
-			doubles: [body.attempts, body.errors],
+			blobs: [body.day, body.extensionVersion, body.promptMode, body.turnBucket, body.cacheRatioBucket],
+			doubles: [
+				body.attempts,
+				body.errors,
+				body.inputTokens,
+				body.cacheReadTokens,
+				body.cacheWriteTokens,
+				body.outputTokens,
+			],
 			indexes: [body.extensionVersion],
 		});
 

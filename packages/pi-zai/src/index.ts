@@ -42,6 +42,9 @@ import {
 import { createMetricsStorage, projectIdForCwd } from "./storage/index.ts";
 import { clearZaiStatus, updateZaiTpsStatus } from "./telemetry/status.ts";
 import { isTelemetryUploadEnabled, syncPendingTelemetry } from "./telemetry/sync.ts";
+import { installZaiIpv4Fetch } from "./zai-fetch.ts";
+
+installZaiIpv4Fetch();
 
 export { loadZaiConfig, type ZaiConfig } from "./config.ts";
 export { formatPiCredentialSource } from "./credentials.ts";
